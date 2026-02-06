@@ -12,6 +12,7 @@ pub struct State {
     pub queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
     pub vertex_buffer: wgpu::Buffer,
+    pub index_buffer: wgpu::Buffer,
     pub render_pipeline: wgpu::RenderPipeline,
     pub camera: camera::Camera,
     pub camera_uniform: camera::CameraUniform,
@@ -235,6 +236,12 @@ impl State {
 
         let vertex_count = gpu_vertex::TRIANGLE_VERTICES.len() as u32;
 
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Index Buffer"),
+            contents: bytemuck::cast_slice(gpu_vertex::TRIANGLE_INDICES),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+
         Ok(Self {
             surface,
             device,
@@ -248,6 +255,7 @@ impl State {
             camera_controller,
             diffuse_bind_group,
             vertex_buffer,
+            index_buffer,
             diffuse_texture,
             window: p_window,
             vertex_count,
@@ -308,6 +316,7 @@ impl State {
             render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]); // NEW!
             render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             render_pass.draw(0..self.vertex_count, 0..1);
         }
 

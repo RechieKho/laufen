@@ -12,6 +12,10 @@ pub const TRIANGLE_VERTICES: &[GPUVertex] = &[
     GPUVertex { position: [0.5, -0.5, 0.0], texture_coordinate: [1.0, 1.0] },
 ];
 
+pub const TRIANGLE_INDICES: &[u16] = &[
+    1, 2, 3
+];
+
 impl GPUVertex {
     const ATTRIBUTES: [wgpu::VertexAttribute; 2] =
         wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x2];
