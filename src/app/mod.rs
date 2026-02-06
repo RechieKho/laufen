@@ -1,3 +1,4 @@
+pub mod gpu_vertex;
 pub mod state;
 
 use std::sync::Arc;

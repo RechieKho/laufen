@@ -1,8 +1,8 @@
+use crate::app::gpu_vertex::{self, GPUVertex};
 use std::sync::Arc;
-
-use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode};
-
+use wgpu::util::DeviceExt;
 use winit::window::Window;
+use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode};
 
 // This will store the state of our game
 pub struct State {
@@ -10,15 +10,16 @@ pub struct State {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub config: wgpu::SurfaceConfiguration,
-    pub window: Arc<Window>,
+    pub vertex_buffer: wgpu::Buffer,
     pub render_pipeline: wgpu::RenderPipeline,
+    pub window: Arc<Window>,
+
+    pub vertex_count: u32,
 
     is_surface_configured: bool,
 }
 
 impl State {
-    // We don't need this to be async right now,
-    // but we will in the next tutorial
     pub async fn new(p_window: Arc<Window>) -> anyhow::Result<Self> {
         let size = p_window.inner_size();
 
@@ -85,8 +86,8 @@ impl State {
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: Some("vs_main"), // 1.
-                buffers: &[],                 // 2.
+                entry_point: Some("vs_main"),
+                buffers: &[GPUVertex::describe()],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -124,13 +125,23 @@ impl State {
             cache: None,          // 6.
         });
 
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Vertex Buffer"),
+            contents: bytemuck::cast_slice(gpu_vertex::TRIANGLE_VERTICES),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        let vertex_count = gpu_vertex::TRIANGLE_VERTICES.len() as u32;
+
         Ok(Self {
             surface,
             device,
             queue,
             config,
-            window: p_window,
             render_pipeline,
+            vertex_buffer,
+            window: p_window,
+            vertex_count,
             is_surface_configured: false,
         })
     }
@@ -165,30 +176,28 @@ impl State {
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
-                color_attachments: &[
-                    // This is what @location(0) in the fragment shader targets
-                    Some(wgpu::RenderPassColorAttachment {
-                        view: &view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color {
-                                r: 0.1,
-                                g: 0.2,
-                                b: 0.3,
-                                a: 1.0,
-                            }),
-                            store: wgpu::StoreOp::Store,
-                        },
-                        depth_slice: None,
-                    }),
-                ],
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.1,
+                            g: 0.2,
+                            b: 0.3,
+                            a: 1.0,
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
                 depth_stencil_attachment: None,
                 occlusion_query_set: None,
                 timestamp_writes: None,
                 multiview_mask: None,
             });
-            render_pass.set_pipeline(&self.render_pipeline); // 2.
-            render_pass.draw(0..3, 0..1); // 3.
+            render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.draw(0..self.vertex_count, 0..1);
         }
 
         // submit will accept anything that implements IntoIter
