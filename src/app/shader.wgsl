@@ -11,13 +11,19 @@ struct VertexOutput {
   @location(0) texture_coordinate: vec2<f32>,
 };
 
+struct CameraUniform {
+    view_projection: mat4x4<f32>,
+};
+@group(1) @binding(0) // 1.
+var<uniform> camera: CameraUniform;
+
 @vertex
 fn vs_main(
   model: VertexInput,
 ) -> VertexOutput {
   var out: VertexOutput;
   out.texture_coordinate = model.texture_coordinate;
-  out.position = vec4<f32>(model.position.xyz, 1.0);
+  out.position = camera.view_projection * vec4<f32>(model.position, 1.0);
   return out;
 }
 

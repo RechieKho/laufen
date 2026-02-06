@@ -1,3 +1,5 @@
+pub mod camera;
+pub mod camera_controller;
 pub mod gpu_vertex;
 pub mod state;
 pub mod texture;
