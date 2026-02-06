@@ -1,5 +1,6 @@
 pub mod gpu_vertex;
 pub mod state;
+pub mod texture;
 
 use std::sync::Arc;
 
