@@ -1,49 +1,54 @@
-pub mod camera;
-pub mod camera_controller;
-pub mod gpu_vertex;
-pub mod instance;
-pub mod state;
-pub mod texture;
+pub mod renderer;
 
+use renderer::rendering_server;
 use std::sync::Arc;
-
-use state::State;
 
 use winit::{
     application::ApplicationHandler,
     event::*,
     event_loop::{ActiveEventLoop, EventLoop},
-    keyboard::PhysicalKey,
     window::Window,
 };
 
+#[allow(unused)]
+pub struct UserEvent {
+    pub code: u8,
+    pub content: String,
+}
+
 pub struct App {
-    state: Option<State>,
+    rendering_server: Option<rendering_server::RenderingServer>,
+    rendering_context: Option<renderer::SampleRenderingContext>,
 }
 
 impl App {
+    pub fn run() -> anyhow::Result<()> {
+        env_logger::init();
+
+        let event_loop = EventLoop::with_user_event().build()?;
+        let mut app = App::new();
+        event_loop.run_app(&mut app)?;
+
+        Ok(())
+    }
+
     pub fn new() -> Self {
-        Self { state: None }
+        Self {
+            rendering_server: None,
+            rendering_context: None,
+        }
     }
 }
 
-impl ApplicationHandler<State> for App {
+impl ApplicationHandler<UserEvent> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        #[allow(unused_mut)]
-        let mut window_attributes = Window::default_attributes();
-
+        let window_attributes = Window::default_attributes();
         let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
-
-        {
-            // If we are not on web we can use pollster to
-            // await the
-            self.state = Some(pollster::block_on(State::new(window)).unwrap());
+        let builder = rendering_server::RenderingServerBuilder::default();
+        self.rendering_server = Some(pollster::block_on(builder.build(window)).unwrap());
+        if let Some(server) = &self.rendering_server {
+            self.rendering_context = Some(renderer::SampleRenderingContext::new(server).unwrap());
         }
-    }
-
-    #[allow(unused_mut)]
-    fn user_event(&mut self, _event_loop: &ActiveEventLoop, mut event: State) {
-        self.state = Some(event);
     }
 
     fn window_event(
@@ -52,47 +57,29 @@ impl ApplicationHandler<State> for App {
         _window_id: winit::window::WindowId,
         event: WindowEvent,
     ) {
-        let state = match &mut self.state {
-            Some(canvas) => canvas,
-            None => return,
-        };
-
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
-            WindowEvent::Resized(size) => state.resize(size.width, size.height),
+            WindowEvent::Resized(size) => {
+                if let Some(server) = &mut self.rendering_server {
+                    server.resize(size.width, size.height);
+                }
+            }
             WindowEvent::RedrawRequested => {
-                state.update();
-                match state.render() {
-                    Ok(_) => {}
-                    Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-                        let size = state.window.inner_size();
-                        state.resize(size.width, size.height);
-                    }
-                    Err(e) => {
-                        log::error!("Unable to render {}", e);
+                if let (Some(context), Some(server)) =
+                    (&mut self.rendering_context, &mut self.rendering_server)
+                {
+                    match context.render(server) {
+                        Ok(_) => {}
+                        Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+                            server.resize_to_window();
+                        }
+                        Err(e) => {
+                            log::error!("Unable to render {}", e);
+                        }
                     }
                 }
             }
-            WindowEvent::KeyboardInput {
-                event:
-                    KeyEvent {
-                        physical_key: PhysicalKey::Code(code),
-                        state: key_state,
-                        ..
-                    },
-                ..
-            } => state.handle_key(event_loop, code, key_state.is_pressed()),
             _ => {}
         }
     }
-}
-
-pub fn run() -> anyhow::Result<()> {
-    env_logger::init();
-
-    let event_loop = EventLoop::with_user_event().build()?;
-    let mut app = App::new();
-    event_loop.run_app(&mut app)?;
-
-    Ok(())
 }
