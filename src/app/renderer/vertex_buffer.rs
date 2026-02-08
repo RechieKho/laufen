@@ -20,21 +20,6 @@ pub struct SimpleVertex {
 const SIMPLE_VERTEX_BUFFER_ATTRIBUTES: [wgpu::VertexAttribute; 2] =
     wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x2];
 
-pub const SIMPLE_VERTEX_DEFAULT_TRIANGLE: [SimpleVertex; 3] = [
-    SimpleVertex {
-        position: [0.0, 0.5, 0.0],
-        texture_coordiation: [0.0, 0.0],
-    },
-    SimpleVertex {
-        position: [-0.5, -0.5, 0.0],
-        texture_coordiation: [0.0, 1.0],
-    },
-    SimpleVertex {
-        position: [0.5, -0.5, 0.0],
-        texture_coordiation: [1.0, 1.0],
-    },
-];
-
 impl VertexBufferElement for SimpleVertex {
     fn get_vertex_buffer_layout() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {

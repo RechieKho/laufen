@@ -21,13 +21,30 @@ pub struct SampleRenderingContext {
 }
 
 impl SampleRenderingContext {
+    const TRIANGLE_VERTICES: [vertex_buffer::SimpleVertex; 3] = [
+        vertex_buffer::SimpleVertex {
+            position: [0.0, 0.5, 0.0],
+            texture_coordiation: [0.0, 0.0],
+        },
+        vertex_buffer::SimpleVertex {
+            position: [-0.5, -0.5, 0.0],
+            texture_coordiation: [0.0, 1.0],
+        },
+        vertex_buffer::SimpleVertex {
+            position: [0.5, -0.5, 0.0],
+            texture_coordiation: [1.0, 1.0],
+        },
+    ];
+
+    const TRIANGLE_INDICES: [u16; 3] = [0, 1, 2];
+
     pub fn new(
         p_server: &rendering_server::RenderingServer,
     ) -> anyhow::Result<SampleRenderingContext> {
         let data = render_data::RenderData::compile(
             p_server,
-            &[&vertex_buffer::SIMPLE_VERTEX_DEFAULT_TRIANGLE],
-            None as Option<&[u16]>,
+            &[&Self::TRIANGLE_VERTICES],
+            Some(&Self::TRIANGLE_INDICES),
         );
         let texture_context = p_server.load_sample_image()?;
         let texture_bind_group_context =
@@ -64,10 +81,8 @@ impl SampleRenderingContext {
                 p_render_pass.set_pipeline(&self.render_pipeline);
                 [&self.texture_bind_group_context].submit(p_render_pass);
                 self.data.submit(p_render_pass);
-                p_render_pass.draw(
-                    0..vertex_buffer::SIMPLE_VERTEX_DEFAULT_TRIANGLE.len() as _,
-                    0..1,
-                );
+                p_render_pass.draw(0..Self::TRIANGLE_VERTICES.len() as _, 0..1);
+                p_render_pass.draw_indexed(0..Self::TRIANGLE_INDICES.len() as _, 0, 0..1);
             },
             &render_pass_builder,
         )
