@@ -4,12 +4,17 @@ use std::mem;
 use super::buffer;
 use super::rendering_server;
 
+pub use wgpu::vertex_attr_array;
+pub use wgpu::VertexAttribute;
+pub use wgpu::VertexBufferLayout;
+pub use wgpu::VertexStepMode;
+
 pub trait VertexBufferElement: repr_trait::C + bytemuck::Pod + bytemuck::Zeroable {
     fn get_vertex_buffer_layout() -> wgpu::VertexBufferLayout<'static>;
 }
 
-type Position = [f32; 3];
-type TextureCoordinate = [f32; 2];
+pub type Position = [f32; 3];
+pub type TextureCoordinate = [f32; 2];
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable, repr_trait::C)]
@@ -17,14 +22,14 @@ pub struct SimpleVertex {
     pub position: Position,
     pub texture_coordiation: TextureCoordinate,
 }
-const SIMPLE_VERTEX_BUFFER_ATTRIBUTES: [wgpu::VertexAttribute; 2] =
-    wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x2];
+const SIMPLE_VERTEX_BUFFER_ATTRIBUTES: [VertexAttribute; 2] =
+    vertex_attr_array![0 => Float32x3, 1 => Float32x2];
 
 impl VertexBufferElement for SimpleVertex {
-    fn get_vertex_buffer_layout() -> wgpu::VertexBufferLayout<'static> {
-        wgpu::VertexBufferLayout {
+    fn get_vertex_buffer_layout() -> VertexBufferLayout<'static> {
+        VertexBufferLayout {
             array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
+            step_mode: VertexStepMode::Vertex,
             attributes: &SIMPLE_VERTEX_BUFFER_ATTRIBUTES,
         }
     }

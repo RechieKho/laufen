@@ -20,23 +20,40 @@ impl rendering_server::SubmitToRenderPass for RenderData {
 }
 
 impl RenderData {
-    pub fn compile<T, I>(
+    pub fn new() -> RenderData {
+        RenderData {
+            vertex_buffers: Vec::new(),
+            index_buffer: None,
+        }
+    }
+
+    pub fn add_vertex_collections<V>(
+        &mut self,
         p_server: &rendering_server::RenderingServer,
-        p_vertices: &[&[T]],
+        p_vertex_collections: &[&[V]],
+    ) where
+        [V]: buffer::ToBuffer<Output = vertex_buffer::VertexBuffer>,
+    {
+        self.vertex_buffers.extend(
+            p_vertex_collections
+                .iter()
+                .map(|vertex_group| vertex_group.to_buffer(p_server, None)),
+        );
+    }
+
+    pub fn set_indices<I>(
+        &mut self,
+        p_server: &rendering_server::RenderingServer,
         p_indices: Option<&[I]>,
-    ) -> RenderData
-    where
-        [T]: buffer::ToBuffer<Output = vertex_buffer::VertexBuffer>,
+    ) where
         [I]: buffer::ToBuffer<Output = index_buffer::IndexBuffer>,
     {
-        let vertex_buffers = p_vertices
-            .iter()
-            .map(|vertex_group| vertex_group.to_buffer(p_server, None))
-            .collect::<Vec<vertex_buffer::VertexBuffer>>();
+        self.index_buffer = p_indices.map(|indices| indices.to_buffer(p_server, None));
+    }
 
-        RenderData {
-            vertex_buffers,
-            index_buffer: p_indices.map(|indices| indices.to_buffer(p_server, None)),
-        }
+    #[allow(dead_code)]
+    pub fn clear(&mut self) {
+        self.vertex_buffers.clear();
+        self.index_buffer = None;
     }
 }

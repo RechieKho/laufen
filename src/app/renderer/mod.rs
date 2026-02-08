@@ -6,6 +6,7 @@ use crate::app::renderer::{
 pub mod bind_group;
 pub mod buffer;
 pub mod index_buffer;
+pub mod instance;
 pub mod render_data;
 pub mod rendering_server;
 pub mod texture;
@@ -18,6 +19,7 @@ pub struct SampleRenderingContext {
     pub texture_bind_group_context: bind_group::BindGroupContext,
     pub shader_module: rendering_server::ShaderModule,
     pub render_pipeline: rendering_server::RenderPipeline,
+    pub instances: Vec<instance::Instance>,
 }
 
 impl SampleRenderingContext {
@@ -41,11 +43,21 @@ impl SampleRenderingContext {
     pub fn new(
         p_server: &rendering_server::RenderingServer,
     ) -> anyhow::Result<SampleRenderingContext> {
-        let data = render_data::RenderData::compile(
-            p_server,
-            &[&Self::TRIANGLE_VERTICES],
-            Some(&Self::TRIANGLE_INDICES),
-        );
+        let instances = vec![
+            (instance::TransformationMatrix::from_translation(cgmath::Vector3::new(
+                -0.5, 0.0, 0.0,
+            )) * instance::TransformationMatrix::from_scale(0.5))
+            .into(),
+            (instance::TransformationMatrix::from_translation(cgmath::Vector3::new(0.5, 0.0, 0.0))
+                * instance::TransformationMatrix::from_scale(0.5))
+            .into(),
+        ] as Vec<instance::Instance>;
+
+        let mut data = render_data::RenderData::new();
+        data.add_vertex_collections(p_server, &[&Self::TRIANGLE_VERTICES]);
+        data.add_vertex_collections(p_server, &[instances.as_slice()]);
+        data.set_indices(p_server, Some(&Self::TRIANGLE_INDICES));
+
         let texture_context = p_server.load_sample_image()?;
         let texture_bind_group_context =
             texture_context.to_bind_group_context(p_server, Some("Texture bind group"));
@@ -55,7 +67,10 @@ impl SampleRenderingContext {
                 shader_module: &shader_module,
                 bind_group_layout: &[&texture_bind_group_context.bind_group_layout],
                 vertex_entry_point: Some("vs_main"),
-                vertex_buffer_layouts: &[vertex_buffer::SimpleVertex::get_vertex_buffer_layout()],
+                vertex_buffer_layouts: &[
+                    vertex_buffer::SimpleVertex::get_vertex_buffer_layout(),
+                    instance::Instance::get_vertex_buffer_layout(),
+                ],
                 fragment_entry_point: Some("fs_main"),
                 overriding_color_targets: None,
             },
@@ -68,6 +83,7 @@ impl SampleRenderingContext {
             texture_context,
             texture_bind_group_context,
             render_pipeline,
+            instances,
         })
     }
 
@@ -82,7 +98,11 @@ impl SampleRenderingContext {
                 [&self.texture_bind_group_context].submit(p_render_pass);
                 self.data.submit(p_render_pass);
                 p_render_pass.draw(0..Self::TRIANGLE_VERTICES.len() as _, 0..1);
-                p_render_pass.draw_indexed(0..Self::TRIANGLE_INDICES.len() as _, 0, 0..1);
+                p_render_pass.draw_indexed(
+                    0..Self::TRIANGLE_INDICES.len() as _,
+                    0,
+                    0..self.instances.len() as _,
+                );
             },
             &render_pass_builder,
         )
