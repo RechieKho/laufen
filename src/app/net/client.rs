@@ -1,3 +1,5 @@
+use renet::ConnectionConfig;
+
 use super::server;
 use std::net;
 use std::time;
@@ -7,59 +9,88 @@ pub struct ClientContext {
     transport: renet_netcode::NetcodeClientTransport,
 }
 
-impl ClientContext {
-    pub fn new(
-        p_socket_address: &net::SocketAddr,
-        p_server_address: &net::SocketAddr,
-        p_config: server::ConnectionConfig,
-    ) -> Self {
-        let client = renet::RenetClient::new(p_config);
+#[derive(partially::Partial)]
+#[partially(derive(Default))]
+pub struct UnsecureClientContextBuilder {
+    pub connection_config: server::ConnectionConfig,
+    pub overriding_current_time: Option<time::Duration>,
+    pub overriding_protocol_id: Option<u64>,
+    pub user_data: Option<[u8; renet_netcode::NETCODE_USER_DATA_BYTES]>,
+}
+
+pub struct UnsecureClientContextBuilderParameters {
+    pub client_address: net::SocketAddr,
+    pub server_address: net::SocketAddr,
+    pub client_id: u64,
+}
+
+impl Default for UnsecureClientContextBuilder {
+    fn default() -> Self {
+        Self {
+            connection_config: ConnectionConfig::default(),
+            overriding_current_time: None,
+            overriding_protocol_id: None,
+            user_data: None,
+        }
+    }
+}
+
+impl UnsecureClientContextBuilder {
+    pub fn build(self, p_parameters: &UnsecureClientContextBuilderParameters) -> ClientContext {
+        let client = renet::RenetClient::new(self.connection_config);
 
         // Setup transport layer using renet_netcode
-        let socket = net::UdpSocket::bind(p_socket_address).unwrap();
-        let current_time = time::SystemTime::now()
-            .duration_since(time::SystemTime::UNIX_EPOCH)
-            .unwrap();
+        let socket = net::UdpSocket::bind(p_parameters.client_address).unwrap();
+        let current_time = self.overriding_current_time.unwrap_or(
+            time::SystemTime::now()
+                .duration_since(time::SystemTime::UNIX_EPOCH)
+                .unwrap(),
+        );
         let authentication = renet_netcode::ClientAuthentication::Unsecure {
-            server_addr: *p_server_address,
-            client_id: 0,
-            user_data: None,
-            protocol_id: server::get_default_protocol_id(),
+            server_addr: p_parameters.server_address,
+            client_id: p_parameters.client_id,
+            user_data: self.user_data,
+            protocol_id: self
+                .overriding_protocol_id
+                .unwrap_or(server::get_default_protocol_id()),
         };
 
         let transport =
             renet_netcode::NetcodeClientTransport::new(current_time, authentication, socket)
                 .unwrap();
 
-        Self { client, transport }
+        ClientContext { client, transport }
+    }
+}
+
+#[allow(unused)]
+impl ClientContext {
+    pub fn is_connected(&self) -> bool {
+        self.client.is_connected()
+    }
+
+    pub fn receive<C>(&mut self, p_channel_id: C) -> Option<server::Bytes>
+    where
+        C: Into<u8>,
+    {
+        self.client.receive_message(p_channel_id)
+    }
+
+    pub fn send<C, M>(&mut self, p_channel_id: C, p_message: M)
+    where
+        C: Into<u8>,
+        M: Into<server::Bytes>,
+    {
+        self.client.send_message(p_channel_id, p_message);
     }
 
     pub fn update(
         &mut self,
         p_delta: time::Duration,
     ) -> anyhow::Result<(), server::NetcodeTransportError> {
-        // Receive new messages and update client
         self.client.update(p_delta);
-        self.transport.update(p_delta, &mut self.client).unwrap();
-
-        if self.client.is_connected() {
-            // Receive message from server
-            while let Some(message) = self
-                .client
-                .receive_message(server::DefaultChannel::ReliableOrdered)
-            {
-                println!("Client Received: {:?}", message);
-                // Handle received message
-            }
-
-            // Send message
-            self.client
-                .send_message(server::DefaultChannel::ReliableOrdered, "client text");
-        }
-
-        // Send packets to server using the transport layer
+        self.transport.update(p_delta, &mut self.client)?;
         self.transport.send_packets(&mut self.client)?;
-
         Ok(())
     }
 }

@@ -5,6 +5,8 @@ use std::net;
 use std::thread;
 use std::time;
 
+use crate::app::net::client::UnsecureClientContextBuilderParameters;
+
 const SAMPLE_CLIENT_ADDRESS: net::SocketAddr =
     net::SocketAddr::new(net::IpAddr::V4(net::Ipv4Addr::new(127, 0, 0, 1)), 0);
 const SAMPLE_SERVER_ADDRESS: net::SocketAddr =
@@ -26,7 +28,7 @@ pub fn start_sample_server() -> ! {
             while let Some(message) =
                 server_context.receive_from(id, server::DefaultChannel::ReliableOrdered)
             {
-                println!("Server Received: {:?}", message)
+                println!("Server Received: {:?}", message);
             }
         }
 
@@ -46,16 +48,28 @@ pub fn start_sample_server() -> ! {
 }
 
 pub fn start_sample_client() -> ! {
-    let mut client_context = client::ClientContext::new(
-        &SAMPLE_CLIENT_ADDRESS,
-        &SAMPLE_SERVER_ADDRESS,
-        server::ConnectionConfig::default(),
+    let mut client_context = client::UnsecureClientContextBuilder::default().build(
+        &UnsecureClientContextBuilderParameters {
+            server_address: SAMPLE_SERVER_ADDRESS,
+            client_address: SAMPLE_CLIENT_ADDRESS,
+            client_id: 0,
+        },
     );
 
     println!("Client started.");
 
     loop {
         let _ = client_context.update(SAMPLE_DELTA);
+
+        if client_context.is_connected() {
+            while let Some(message) =
+                client_context.receive(server::DefaultChannel::ReliableOrdered)
+            {
+                println!("Client Received: {:?}", message);
+                client_context.send(server::DefaultChannel::ReliableOrdered, "Hi from client.");
+            }
+        }
+
         thread::sleep(SAMPLE_DELTA);
     }
 }
