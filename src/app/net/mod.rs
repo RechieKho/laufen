@@ -5,8 +5,6 @@ use std::net;
 use std::thread;
 use std::time;
 
-use crate::app::net::client::UnsecureClientContextBuilderParameters;
-
 const SAMPLE_CLIENT_ADDRESS: net::SocketAddr =
     net::SocketAddr::new(net::IpAddr::V4(net::Ipv4Addr::new(127, 0, 0, 1)), 0);
 const SAMPLE_SERVER_ADDRESS: net::SocketAddr =
@@ -15,7 +13,7 @@ const SAMPLE_DELTA: time::Duration = time::Duration::from_millis(16);
 
 pub fn start_sample_server() -> ! {
     let mut server_context =
-        server::ServerContextBuilder::default().build(&server::ServerContextBuilderParameters {
+        server::ServerContextBuilder::default().build(server::ServerContextBuilderParameters {
             address: SAMPLE_SERVER_ADDRESS,
         });
 
@@ -49,7 +47,7 @@ pub fn start_sample_server() -> ! {
 
 pub fn start_sample_client() -> ! {
     let mut client_context = client::UnsecureClientContextBuilder::default().build(
-        &UnsecureClientContextBuilderParameters {
+        client::UnsecureClientContextBuilderParameters {
             server_address: SAMPLE_SERVER_ADDRESS,
             client_address: SAMPLE_CLIENT_ADDRESS,
             client_id: 0,

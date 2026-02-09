@@ -36,7 +36,7 @@ impl Default for UnsecureClientContextBuilder {
 }
 
 impl UnsecureClientContextBuilder {
-    pub fn build(self, p_parameters: &UnsecureClientContextBuilderParameters) -> ClientContext {
+    pub fn build(self, p_parameters: UnsecureClientContextBuilderParameters) -> ClientContext {
         let client = renet::RenetClient::new(self.connection_config);
 
         // Setup transport layer using renet_netcode

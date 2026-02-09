@@ -51,7 +51,7 @@ impl Default for ServerContextBuilder {
 }
 
 impl ServerContextBuilder {
-    pub fn build(self, p_parameters: &ServerContextBuilderParameters) -> ServerContext {
+    pub fn build(self, p_parameters: ServerContextBuilderParameters) -> ServerContext {
         let server = renet::RenetServer::new(self.connection_config);
 
         // Setup transport layer using renet_netcode

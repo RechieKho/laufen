@@ -38,7 +38,12 @@ impl ApplicationHandler<UserEvent> for App {
         let window_attributes = Window::default_attributes();
         let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
         let builder = rendering_server::RenderingServerBuilder::default();
-        self.rendering_server = Some(pollster::block_on(builder.build(window)).unwrap());
+        self.rendering_server = Some(
+            pollster::block_on(
+                builder.build(rendering_server::RenderingServerBuilderParameters { window }),
+            )
+            .unwrap(),
+        );
         if let Some(server) = &self.rendering_server {
             self.rendering_context = Some(renderer::SampleRenderingContext::new(server).unwrap());
         }

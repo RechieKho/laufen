@@ -92,6 +92,10 @@ pub struct RenderingServerBuilder<'a> {
     pub surface_configuration_desired_maximum_frame_latency: u32,
 }
 
+pub struct RenderingServerBuilderParameters {
+    pub window: Arc<winit::window::Window>,
+}
+
 impl<'a> Default for RenderingServerBuilder<'a> {
     fn default() -> Self {
         Self {
@@ -118,14 +122,14 @@ impl<'a> Default for RenderingServerBuilder<'a> {
 
 impl<'a> RenderingServerBuilder<'a> {
     pub async fn build(
-        &self,
-        p_window: Arc<winit::window::Window>,
+        self,
+        p_parameter: RenderingServerBuilderParameters,
     ) -> anyhow::Result<RenderingServer> {
-        let size = p_window.inner_size();
+        let size = p_parameter.window.inner_size();
 
         let instance = wgpu::Instance::new(&self.instance_descriptor);
 
-        let surface = instance.create_surface(p_window.clone()).unwrap();
+        let surface = instance.create_surface(p_parameter.window.clone()).unwrap();
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -166,7 +170,7 @@ impl<'a> RenderingServerBuilder<'a> {
             surface_configuration,
             device,
             queue,
-            window: p_window,
+            window: p_parameter.window,
 
             depth_texture_context: None,
         };
