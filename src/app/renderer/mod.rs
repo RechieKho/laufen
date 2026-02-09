@@ -44,12 +44,11 @@ impl SampleRenderingContext {
         p_server: &rendering_server::RenderingServer,
     ) -> anyhow::Result<SampleRenderingContext> {
         let instances = vec![
-            (instance::TransformationMatrix::from_translation(cgmath::Vector3::new(
-                -0.5, 0.0, 0.0,
-            )) * instance::TransformationMatrix::from_scale(0.5))
+            (instance::TransformationMatrix::from_translation(glam::Vec3::new(-0.5, 0.0, 0.0))
+                * instance::TransformationMatrix::from_scale(glam::Vec3::new(0.5, 0.5, 0.5)))
             .into(),
-            (instance::TransformationMatrix::from_translation(cgmath::Vector3::new(0.5, 0.0, 0.0))
-                * instance::TransformationMatrix::from_scale(0.5))
+            (instance::TransformationMatrix::from_translation(glam::Vec3::new(0.5, 0.0, 0.0))
+                * instance::TransformationMatrix::from_scale(glam::Vec3::new(0.5, 0.5, 0.5)))
             .into(),
         ] as Vec<instance::Instance>;
 

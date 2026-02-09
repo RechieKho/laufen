@@ -4,7 +4,7 @@ use std::mem;
 use super::vertex_buffer;
 
 #[allow(unused)]
-pub type TransformationMatrix = cgmath::Matrix4<f32>;
+pub type TransformationMatrix = glam::Mat4;
 pub type RawTransformationMatrix = [[f32; 4]; 4];
 
 #[repr(C)]
@@ -25,10 +25,10 @@ impl vertex_buffer::VertexBufferElement for Instance {
     }
 }
 
-impl From<cgmath::Matrix4<f32>> for Instance {
-    fn from(value: cgmath::Matrix4<f32>) -> Self {
+impl From<glam::Mat4> for Instance {
+    fn from(p_value: glam::Mat4) -> Self {
         Self {
-            transformation_matrix: value.into(),
+            transformation_matrix: bytemuck::cast(p_value),
         }
     }
 }
