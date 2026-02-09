@@ -24,7 +24,7 @@ impl ClientContext {
             server_addr: *p_server_address,
             client_id: 0,
             user_data: None,
-            protocol_id: 0,
+            protocol_id: server::get_default_protocol_id(),
         };
 
         let transport =

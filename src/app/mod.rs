@@ -3,13 +3,15 @@ pub mod renderer;
 
 use renderer::rendering_server;
 use std::sync::Arc;
-
 use winit::{
     application::ApplicationHandler,
     event::*,
     event_loop::{ActiveEventLoop, EventLoop},
     window::Window,
 };
+
+#[allow(unused)]
+pub use net::start_sample_net;
 
 #[allow(unused)]
 pub struct UserEvent {
@@ -75,6 +77,7 @@ impl ApplicationHandler<UserEvent> for App {
     }
 }
 
+#[allow(unused)]
 pub fn run_app() -> anyhow::Result<()> {
     env_logger::init();
 
@@ -83,8 +86,4 @@ pub fn run_app() -> anyhow::Result<()> {
     event_loop.run_app(&mut app)?;
 
     Ok(())
-}
-
-pub fn run_sample_net_code() {
-    net::run_sample_net();
 }
