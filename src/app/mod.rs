@@ -1,3 +1,4 @@
+pub mod net;
 pub mod renderer;
 
 use renderer::rendering_server;
@@ -22,16 +23,6 @@ pub struct App {
 }
 
 impl App {
-    pub fn run() -> anyhow::Result<()> {
-        env_logger::init();
-
-        let event_loop = EventLoop::with_user_event().build()?;
-        let mut app = App::new();
-        event_loop.run_app(&mut app)?;
-
-        Ok(())
-    }
-
     pub fn new() -> Self {
         Self {
             rendering_server: None,
@@ -82,4 +73,18 @@ impl ApplicationHandler<UserEvent> for App {
             _ => {}
         }
     }
+}
+
+pub fn run_app() -> anyhow::Result<()> {
+    env_logger::init();
+
+    let event_loop = EventLoop::with_user_event().build()?;
+    let mut app = App::new();
+    event_loop.run_app(&mut app)?;
+
+    Ok(())
+}
+
+pub fn run_sample_net_code() {
+    net::run_sample_net();
 }
