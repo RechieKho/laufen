@@ -1,5 +1,3 @@
-use renet::ConnectionConfig;
-
 use super::server;
 use std::net;
 use std::time;
@@ -9,7 +7,7 @@ pub struct ClientContext {
     transport: renet_netcode::NetcodeClientTransport,
 }
 
-#[derive(partially::Partial)]
+#[derive(partially::Partial, Default)]
 #[partially(derive(Default))]
 pub struct UnsecureClientContextBuilder {
     pub connection_config: server::ConnectionConfig,
@@ -22,17 +20,6 @@ pub struct UnsecureClientContextBuilderParameters {
     pub client_address: net::SocketAddr,
     pub server_address: net::SocketAddr,
     pub client_id: u64,
-}
-
-impl Default for UnsecureClientContextBuilder {
-    fn default() -> Self {
-        Self {
-            connection_config: ConnectionConfig::default(),
-            overriding_current_time: None,
-            overriding_protocol_id: None,
-            user_data: None,
-        }
-    }
 }
 
 impl UnsecureClientContextBuilder {

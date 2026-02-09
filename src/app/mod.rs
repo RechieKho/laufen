@@ -1,5 +1,6 @@
 pub mod net;
 pub mod renderer;
+pub mod script;
 
 use renderer::rendering_server;
 use std::sync::Arc;
@@ -12,6 +13,9 @@ use winit::{
 
 #[allow(unused)]
 pub use net::start_sample_net;
+
+#[allow(unused)]
+pub use script::run_sample_script;
 
 #[allow(unused)]
 pub struct UserEvent {

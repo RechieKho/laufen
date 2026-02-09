@@ -17,6 +17,7 @@ repr-trait = "1.0.0"
 partially = { version = "0.2", features = [ "derive" ] }
 renet = "2.0.0"
 renet_netcode = "2.0.0"
+rhai = "1.24.0"
 
 [dependencies.image]
 version = "0.25"
