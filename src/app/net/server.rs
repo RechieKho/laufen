@@ -76,7 +76,6 @@ impl ServerContextBuilder {
     }
 }
 
-#[allow(unused)]
 impl ServerContext {
     pub fn send<C, M>(&mut self, p_client_id: ClientId, p_channel_id: C, p_message: M)
     where

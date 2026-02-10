@@ -5,6 +5,7 @@ use super::index_buffer;
 use super::rendering_server;
 use super::vertex_buffer;
 
+#[derive(Default)]
 pub struct RenderData {
     pub vertex_buffers: Vec<vertex_buffer::VertexBuffer>,
     pub index_buffer: Option<index_buffer::IndexBuffer>,
@@ -20,13 +21,6 @@ impl rendering_server::SubmitToRenderPass for RenderData {
 }
 
 impl RenderData {
-    pub fn new() -> RenderData {
-        RenderData {
-            vertex_buffers: Vec::new(),
-            index_buffer: None,
-        }
-    }
-
     pub fn add_vertex_collections<V>(
         &mut self,
         p_server: &rendering_server::RenderingServer,
@@ -51,7 +45,6 @@ impl RenderData {
         self.index_buffer = p_indices.map(|indices| indices.to_buffer(p_server, None));
     }
 
-    #[allow(dead_code)]
     pub fn clear(&mut self) {
         self.vertex_buffers.clear();
         self.index_buffer = None;

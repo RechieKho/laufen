@@ -1,5 +1,3 @@
-#![allow(unused_imports)]
-
 use super::texture;
 use image::GenericImageView;
 use std::num::NonZero;
@@ -66,12 +64,9 @@ pub trait SubmitToRenderPass {
 }
 
 /// Central server for rendering.
-#[allow(unused)]
 pub struct RenderingServer {
-    instance: wgpu::Instance,
     surface: wgpu::Surface<'static>,
     surface_configuration: wgpu::SurfaceConfiguration,
-    adapter: wgpu::Adapter,
     device: wgpu::Device,
     queue: wgpu::Queue,
     window: Arc<winit::window::Window>,
@@ -164,9 +159,7 @@ impl<'a> RenderingServerBuilder<'a> {
         surface.configure(&device, &surface_configuration);
 
         let mut server = RenderingServer {
-            instance,
             surface,
-            adapter,
             surface_configuration,
             device,
             queue,

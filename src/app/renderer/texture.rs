@@ -1,7 +1,6 @@
 use super::bind_group;
 use super::rendering_server;
 
-#[allow(unused)]
 pub struct TextureContext {
     pub texture: rendering_server::Texture,
     pub view: rendering_server::TextureView,

@@ -11,7 +11,7 @@ const SAMPLE_SERVER_ADDRESS: net::SocketAddr =
     net::SocketAddr::new(net::IpAddr::V4(net::Ipv4Addr::new(127, 0, 0, 1)), 5000);
 const SAMPLE_DELTA: time::Duration = time::Duration::from_millis(16);
 
-pub fn start_sample_server() -> ! {
+pub fn run_sample_server() -> ! {
     let mut server_context =
         server::ServerContextBuilder::default().build(server::ServerContextBuilderParameters {
             address: SAMPLE_SERVER_ADDRESS,
@@ -45,7 +45,7 @@ pub fn start_sample_server() -> ! {
     }
 }
 
-pub fn start_sample_client() -> ! {
+pub fn run_sample_client() -> ! {
     let mut client_context = client::UnsecureClientContextBuilder::default().build(
         client::UnsecureClientContextBuilderParameters {
             server_address: SAMPLE_SERVER_ADDRESS,
@@ -72,9 +72,9 @@ pub fn start_sample_client() -> ! {
     }
 }
 
-pub fn start_sample_net() -> ! {
-    let server_thread = thread::spawn(start_sample_server);
-    let _client_thread = thread::spawn(start_sample_client);
+pub fn run_sample_net() -> ! {
+    let server_thread = thread::spawn(run_sample_server);
+    let _client_thread = thread::spawn(run_sample_client);
 
     server_thread.join().unwrap();
 }

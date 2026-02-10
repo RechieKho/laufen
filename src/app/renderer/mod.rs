@@ -12,7 +12,6 @@ pub mod rendering_server;
 pub mod texture;
 pub mod vertex_buffer;
 
-#[allow(unused)]
 pub struct SampleRenderingContext {
     pub data: render_data::RenderData,
     pub texture_context: texture::TextureContext,
@@ -52,7 +51,7 @@ impl SampleRenderingContext {
             .into(),
         ] as Vec<instance::Instance>;
 
-        let mut data = render_data::RenderData::new();
+        let mut data = render_data::RenderData::default();
         data.add_vertex_collections(p_server, &[&Self::TRIANGLE_VERTICES]);
         data.add_vertex_collections(p_server, &[instances.as_slice()]);
         data.set_indices(p_server, Some(&Self::TRIANGLE_INDICES));
@@ -106,4 +105,67 @@ impl SampleRenderingContext {
             &render_pass_builder,
         )
     }
+}
+
+#[derive(Default)]
+pub struct SampleRenderingApp {
+    rendering_server: Option<rendering_server::RenderingServer>,
+    rendering_context: Option<SampleRenderingContext>,
+}
+
+impl winit::application::ApplicationHandler<()> for SampleRenderingApp {
+    fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        let window_attributes = winit::window::Window::default_attributes();
+        let window = std::sync::Arc::new(event_loop.create_window(window_attributes).unwrap());
+        let builder = rendering_server::RenderingServerBuilder::default();
+        self.rendering_server = Some(
+            pollster::block_on(
+                builder.build(rendering_server::RenderingServerBuilderParameters { window }),
+            )
+            .unwrap(),
+        );
+        if let Some(server) = &self.rendering_server {
+            self.rendering_context = Some(SampleRenderingContext::new(server).unwrap());
+        }
+    }
+
+    fn window_event(
+        &mut self,
+        event_loop: &winit::event_loop::ActiveEventLoop,
+        _window_id: winit::window::WindowId,
+        event: winit::event::WindowEvent,
+    ) {
+        match event {
+            winit::event::WindowEvent::CloseRequested => event_loop.exit(),
+            winit::event::WindowEvent::Resized(size) => {
+                if let Some(server) = &mut self.rendering_server {
+                    server.resize(size.width, size.height);
+                }
+            }
+            winit::event::WindowEvent::RedrawRequested => {
+                if let (Some(context), Some(server)) =
+                    (&mut self.rendering_context, &mut self.rendering_server)
+                {
+                    match context.render(server) {
+                        Ok(_) => {}
+                        Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+                            server.resize_to_window();
+                        }
+                        Err(e) => {
+                            log::error!("Unable to render {}", e);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+pub fn run_sample_rendering_app() -> anyhow::Result<()> {
+    env_logger::init();
+    let event_loop = winit::event_loop::EventLoop::with_user_event().build()?;
+    let mut app = SampleRenderingApp::default();
+    event_loop.run_app(&mut app)?;
+    Ok(())
 }

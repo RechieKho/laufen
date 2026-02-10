@@ -1,11 +1,8 @@
-
-#[allow(unused)]
 #[derive(Clone, Debug)]
 struct Counter {
     value: i64,
 }
 
-#[allow(unused)]
 impl Counter {
     pub fn new() -> Self {
         Self { value: 0 }

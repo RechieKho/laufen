@@ -50,7 +50,6 @@ impl UnsecureClientContextBuilder {
     }
 }
 
-#[allow(unused)]
 impl ClientContext {
     pub fn is_connected(&self) -> bool {
         self.client.is_connected()

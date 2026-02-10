@@ -3,7 +3,6 @@ use std::mem;
 
 use super::vertex_buffer;
 
-#[allow(unused)]
 pub type TransformationMatrix = glam::Mat4;
 pub type RawTransformationMatrix = [[f32; 4]; 4];
 
