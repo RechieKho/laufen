@@ -1,4 +1,4 @@
-use crate::app::renderer::{
+use super::renderer::{
     bind_group::ToBindGroupContext, rendering_server::SubmitToRenderPass,
     vertex_buffer::VertexBufferElement,
 };

@@ -1,5 +1,5 @@
-use laufen::app;
+use laufen::adapter;
 
 fn main() {
-    let _ = app::run_sample_script();
+    let _ = adapter::run_sample_script();
 }

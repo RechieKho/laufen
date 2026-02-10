@@ -1,5 +1,5 @@
-use laufen::app;
+use laufen::adapter;
 
 fn main() {
-    app::run_sample_net();
+    adapter::run_sample_net();
 }
