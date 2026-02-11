@@ -20,7 +20,7 @@ pub type TextureCoordinate = [f32; 2];
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable, repr_trait::C)]
 pub struct SimpleVertex {
     pub position: Position,
-    pub texture_coordiation: TextureCoordinate,
+    pub texture_coordinate: TextureCoordinate,
 }
 const SIMPLE_VERTEX_BUFFER_ATTRIBUTES: [VertexAttribute; 2] =
     vertex_attr_array![0 => Float32x3, 1 => Float32x2];

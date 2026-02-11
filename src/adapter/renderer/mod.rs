@@ -25,15 +25,15 @@ impl SampleRenderingContext {
     const TRIANGLE_VERTICES: [vertex_buffer::SimpleVertex; 3] = [
         vertex_buffer::SimpleVertex {
             position: [0.0, 0.5, 0.0],
-            texture_coordiation: [0.0, 0.0],
+            texture_coordinate: [0.0, 0.0],
         },
         vertex_buffer::SimpleVertex {
             position: [-0.5, -0.5, 0.0],
-            texture_coordiation: [0.0, 1.0],
+            texture_coordinate: [0.0, 1.0],
         },
         vertex_buffer::SimpleVertex {
             position: [0.5, -0.5, 0.0],
-            texture_coordiation: [1.0, 1.0],
+            texture_coordinate: [1.0, 1.0],
         },
     ];
 
