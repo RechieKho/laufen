@@ -9,11 +9,17 @@ use super::vertex_buffer;
 pub struct RenderData {
     pub vertex_buffers: Vec<vertex_buffer::VertexBuffer>,
     pub index_buffer: Option<index_buffer::IndexBuffer>,
+    pub vertex_buffer_slot_offset: u32,
 }
 
 impl rendering_server::SubmitToRenderPass for RenderData {
     fn submit<'a>(&self, p_render_pass: &mut wgpu::RenderPass<'a>) {
-        self.vertex_buffers.as_slice().submit(p_render_pass);
+        for (i, buffer) in self.vertex_buffers.iter().enumerate() {
+            p_render_pass.set_vertex_buffer(
+                i as u32 + self.vertex_buffer_slot_offset,
+                (*buffer).slice(..),
+            );
+        }
         if let Some(buffer) = &self.index_buffer {
             buffer.submit(p_render_pass);
         }

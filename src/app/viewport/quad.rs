@@ -1,6 +1,9 @@
+use crate::adapter::renderer::rendering_server::SubmitToRenderPass;
+use crate::adapter::renderer::vertex_buffer::VertexBufferElement;
 use crate::adapter::renderer::{instance, render_data, rendering_server, vertex_buffer};
 use repr_trait::C;
 
+pub use instance::Instance;
 pub use instance::TransformationMatrix;
 
 pub type Position = [f32; 3];
@@ -25,60 +28,65 @@ impl vertex_buffer::VertexBufferElement for QuadVertex {
     }
 }
 
-/// Transformation matrix that transforms the original quad to face upward (+y-axis).
-/// The UV map from -x-axis to +x-axis horizontally, +z-axis to -z-axis vertically.
-pub const QUAD_UPWARD_MATRIX: TransformationMatrix = TransformationMatrix::IDENTITY;
+/// A render pipeline context for rendering quads.
+pub struct QuadRenderPipelineContext {
+    render_pipeline: rendering_server::RenderPipeline,
+    render_data: render_data::RenderData,
+}
 
-/// Transformation matrix that transforms the original quad to face downward (-y-axis).
-/// the UV map from +x-axis to -x-axis horizontally, +z-axis to -z-axis vertically.
-pub const QUAD_DOWNWARD_MATRIX: TransformationMatrix = TransformationMatrix::from_cols(
-    glam::Vec4::NEG_X,
-    glam::Vec4::NEG_Y,
-    glam::Vec4::Z,
-    glam::Vec4::W,
-);
+impl QuadRenderPipelineContext {
+    /// Transformation matrix that transforms the original quad to face upward (+y-axis).
+    /// The UV map from -x-axis to +x-axis horizontally, +z-axis to -z-axis vertically.
+    pub const QUAD_UPWARD_MATRIX: TransformationMatrix = TransformationMatrix::IDENTITY;
 
-/// Transformation matrix that transform model to face left (-x-axis).
-/// the UV map from -y-axis to +y-axis horizontally, +z-axis to -z-axis vertically.
-pub const QUAD_LEFT_MATRIX: TransformationMatrix = TransformationMatrix::from_cols(
-    glam::Vec4::Y,
-    glam::Vec4::NEG_X,
-    glam::Vec4::Z,
-    glam::Vec4::W,
-);
+    /// Transformation matrix that transforms the original quad to face downward (-y-axis).
+    /// the UV map from +x-axis to -x-axis horizontally, +z-axis to -z-axis vertically.
+    pub const QUAD_DOWNWARD_MATRIX: TransformationMatrix = TransformationMatrix::from_cols(
+        glam::Vec4::NEG_X,
+        glam::Vec4::NEG_Y,
+        glam::Vec4::Z,
+        glam::Vec4::W,
+    );
 
-/// Transformation matrix that transform model to face right (+x-axis).
-/// the UV map from +y-axis to -y-axis horizontally, +z-axis to -z-axis vertically.
-pub const QUAD_RIGHT_MATRIX: TransformationMatrix = TransformationMatrix::from_cols(
-    glam::Vec4::NEG_Y,
-    glam::Vec4::X,
-    glam::Vec4::Z,
-    glam::Vec4::W,
-);
+    /// Transformation matrix that transform model to face left (-x-axis).
+    /// the UV map from -y-axis to +y-axis horizontally, +z-axis to -z-axis vertically.
+    pub const QUAD_LEFT_MATRIX: TransformationMatrix = TransformationMatrix::from_cols(
+        glam::Vec4::Y,
+        glam::Vec4::NEG_X,
+        glam::Vec4::Z,
+        glam::Vec4::W,
+    );
 
-/// Transformation matrix that transform model to face forward (+z-axis).
-/// the UV map from -x-axis to +x-axis horizontally, -y-axis to +y-axis vertically.
-pub const QUAD_FORWARD_MATRIX: TransformationMatrix = TransformationMatrix::from_cols(
-    glam::Vec4::X,
-    glam::Vec4::Z,
-    glam::Vec4::NEG_Y,
-    glam::Vec4::W,
-);
+    /// Transformation matrix that transform model to face right (+x-axis).
+    /// the UV map from +y-axis to -y-axis horizontally, +z-axis to -z-axis vertically.
+    pub const QUAD_RIGHT_MATRIX: TransformationMatrix = TransformationMatrix::from_cols(
+        glam::Vec4::NEG_Y,
+        glam::Vec4::X,
+        glam::Vec4::Z,
+        glam::Vec4::W,
+    );
 
-/// Transformation matrix that transform model to face backward (-z-axis).
-/// the UV map from -x-axis to +x-axis horizontally, +y-axis to -y-axis vertically.
-pub const QUAD_BACKWARD_MATRIX: TransformationMatrix = TransformationMatrix::from_cols(
-    glam::Vec4::X,
-    glam::Vec4::NEG_Z,
-    glam::Vec4::Y,
-    glam::Vec4::W,
-);
+    /// Transformation matrix that transform model to face forward (+z-axis).
+    /// the UV map from -x-axis to +x-axis horizontally, -y-axis to +y-axis vertically.
+    pub const QUAD_FORWARD_MATRIX: TransformationMatrix = TransformationMatrix::from_cols(
+        glam::Vec4::X,
+        glam::Vec4::Z,
+        glam::Vec4::NEG_Y,
+        glam::Vec4::W,
+    );
 
-/// Create model-space Quad to be rendered.
-/// The quad spans 1 by 1 unit and facing upward.
-pub fn create_model_space_quad_render_data(
-    p_server: &rendering_server::RenderingServer,
-) -> render_data::RenderData {
+    /// Transformation matrix that transform model to face backward (-z-axis).
+    /// the UV map from -x-axis to +x-axis horizontally, +y-axis to -y-axis vertically.
+    pub const QUAD_BACKWARD_MATRIX: TransformationMatrix = TransformationMatrix::from_cols(
+        glam::Vec4::X,
+        glam::Vec4::NEG_Z,
+        glam::Vec4::Y,
+        glam::Vec4::W,
+    );
+
+    pub const QUAD_SIZE: glam::Vec2 = glam::Vec2::ONE;
+
+    /// A quad that spans 1 by 1 unit and facing upward.
     const QUAD_VERTICES: [QuadVertex; 4] = [
         QuadVertex {
             position: [0.5, 0.0, 0.5],
@@ -99,8 +107,50 @@ pub fn create_model_space_quad_render_data(
     ];
     const QUAD_INDICES: [u16; 6] = [1, 2, 3, 3, 0, 1];
 
-    let mut data = render_data::RenderData::default();
-    data.add_vertex_collections(p_server, &[&QUAD_VERTICES]);
-    data.set_indices(p_server, Some(&QUAD_INDICES));
-    data
+    pub fn new(p_server: &rendering_server::RenderingServer) -> Self {
+        let mut render_data = render_data::RenderData::default();
+        render_data.add_vertex_collections(p_server, &[&Self::QUAD_VERTICES]);
+        render_data.set_indices(p_server, Some(&Self::QUAD_INDICES));
+        let shader_module =
+            p_server.create_shader_module(rendering_server::include_wgsl!("quad_shader.wgsl"));
+        let render_pipeline = p_server.create_pipeline(
+            &rendering_server::RenderPipelineParameters {
+                shader_module: &shader_module,
+                bind_group_layout: &[],
+                vertex_entry_point: Some("vs_main"),
+                vertex_buffer_layouts: &[
+                    QuadVertex::get_vertex_buffer_layout(),
+                    Instance::get_vertex_buffer_layout(),
+                ],
+                fragment_entry_point: Some("fs_main"),
+                overriding_color_targets: None,
+            },
+            &rendering_server::RenderPipelineOptions::default(),
+        );
+
+        Self {
+            render_data,
+            render_pipeline,
+        }
+    }
+
+    pub fn draw(
+        &self,
+        p_server: &rendering_server::RenderingServer,
+        p_render_pass: &mut rendering_server::RenderPass,
+        p_instances: &[Instance],
+    ) {
+        let mut instance_render_data = render_data::RenderData::default();
+        instance_render_data.add_vertex_collections(p_server, &[p_instances]);
+        instance_render_data.vertex_buffer_slot_offset = 1;
+
+        p_render_pass.set_pipeline(&self.render_pipeline);
+        self.render_data.submit(p_render_pass);
+        instance_render_data.submit(p_render_pass);
+        p_render_pass.draw_indexed(
+            0..Self::QUAD_INDICES.len() as _,
+            0,
+            0..p_instances.len() as _,
+        );
+    }
 }

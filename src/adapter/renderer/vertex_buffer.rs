@@ -37,6 +37,20 @@ impl VertexBufferElement for SimpleVertex {
 
 pub struct VertexBuffer(rendering_server::Buffer);
 
+impl std::ops::Deref for VertexBuffer {
+    type Target = rendering_server::Buffer;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for VertexBuffer {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
 impl<T> buffer::ToBuffer for [T]
 where
     T: VertexBufferElement,

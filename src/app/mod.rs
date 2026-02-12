@@ -1,6 +1,8 @@
+use crate::app::viewport::quad;
+
 pub mod viewport;
 
-trait Update {
+pub trait Update {
     fn update(&mut self, p_delta: std::time::Duration);
 }
 
@@ -30,7 +32,7 @@ impl winit::application::ApplicationHandler<()> for App {
         p_event: winit::event::WindowEvent,
     ) {
         let current_timestamp = std::time::Instant::now();
-        let delta = current_timestamp.duration_since(self.last_timestamp);
+        let _delta = current_timestamp.duration_since(self.last_timestamp);
 
         match p_event {
             winit::event::WindowEvent::CloseRequested => p_event_loop.exit(),
@@ -41,7 +43,13 @@ impl winit::application::ApplicationHandler<()> for App {
             }
             winit::event::WindowEvent::RedrawRequested => {
                 if let Some(viewport) = &mut self.viewport {
-                    viewport.update(delta);
+                    viewport
+                        .render(viewport::ViewportRenderParameters {
+                            quad_instances: &[quad::Instance::from(
+                                quad::QuadRenderPipelineContext::QUAD_BACKWARD_MATRIX,
+                            )],
+                        })
+                        .unwrap();
                 }
             }
             _ => {}

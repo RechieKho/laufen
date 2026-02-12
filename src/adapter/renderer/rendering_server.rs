@@ -557,13 +557,13 @@ impl RenderingServer {
         p_pass_builder: &TypicalRenderPassBuilder,
     ) -> anyhow::Result<(), SurfaceError>
     where
-        R: FnMut(&mut RenderPass),
+        R: FnMut(&RenderingServer, &mut RenderPass),
     {
         self.render(&mut |p_server: &mut RenderingServer,
                           p_encoder: &mut CommandEncoder,
                           p_view: &TextureView| {
             let mut render_pass = p_pass_builder.build(p_server, p_encoder, p_view);
-            p_render(&mut render_pass);
+            p_render(p_server, &mut render_pass);
         })
     }
 }

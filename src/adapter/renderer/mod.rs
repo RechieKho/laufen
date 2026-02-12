@@ -91,11 +91,11 @@ impl SampleRenderingContext {
     ) -> anyhow::Result<(), rendering_server::SurfaceError> {
         let render_pass_builder = rendering_server::TypicalRenderPassBuilder::default();
         p_server.render_with_typical_pass(
-            &mut |p_render_pass: &mut rendering_server::RenderPass| {
+            &mut |_p_server: &rendering_server::RenderingServer,
+                  p_render_pass: &mut rendering_server::RenderPass| {
                 p_render_pass.set_pipeline(&self.render_pipeline);
                 [&self.texture_bind_group_context].submit(p_render_pass);
                 self.data.submit(p_render_pass);
-                p_render_pass.draw(0..Self::TRIANGLE_VERTICES.len() as _, 0..1);
                 p_render_pass.draw_indexed(
                     0..Self::TRIANGLE_INDICES.len() as _,
                     0,
