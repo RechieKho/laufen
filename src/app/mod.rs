@@ -57,23 +57,34 @@ impl winit::application::ApplicationHandler<()> for App {
         }
 
         if let Some(viewport) = &mut self.viewport {
-            let camera_origin = viewport.camera_context().properties.origin;
-            let camera_direction = viewport.camera_context().properties.direction;
+            let camera_properties = viewport.camera_properties();
             const LINEAR_SPEED: f32 = 0.01;
             const ANGULAR_SPEED: f32 = std::f32::consts::PI / 100.0;
 
             if self.input.key_held(winit::keyboard::KeyCode::KeyW) {
-                viewport.camera_context_mut().properties.origin =
-                    camera_origin + camera_direction * LINEAR_SPEED;
+                viewport.set_camera_properties(viewport::PartialViewportCameraProperties {
+                    origin: Some(
+                        camera_properties.origin + camera_properties.direction * LINEAR_SPEED,
+                    ),
+                    ..Default::default()
+                });
             } else if self.input.key_held(winit::keyboard::KeyCode::KeyS) {
-                viewport.camera_context_mut().properties.origin =
-                    camera_origin - camera_direction * LINEAR_SPEED;
+                viewport.set_camera_properties(viewport::PartialViewportCameraProperties {
+                    origin: Some(
+                        camera_properties.origin - camera_properties.direction * LINEAR_SPEED,
+                    ),
+                    ..Default::default()
+                });
             } else if self.input.key_held(winit::keyboard::KeyCode::KeyA) {
-                viewport.camera_context_mut().properties.direction =
-                    camera_direction.rotate_y(ANGULAR_SPEED);
+                viewport.set_camera_properties(viewport::PartialViewportCameraProperties {
+                    direction: Some(camera_properties.direction.rotate_y(ANGULAR_SPEED)),
+                    ..Default::default()
+                });
             } else if self.input.key_held(winit::keyboard::KeyCode::KeyD) {
-                viewport.camera_context_mut().properties.direction =
-                    camera_direction.rotate_y(-ANGULAR_SPEED);
+                viewport.set_camera_properties(viewport::PartialViewportCameraProperties {
+                    direction: Some(camera_properties.direction.rotate_y(-ANGULAR_SPEED)),
+                    ..Default::default()
+                });
             }
         }
     }
