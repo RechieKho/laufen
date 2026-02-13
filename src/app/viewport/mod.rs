@@ -4,10 +4,15 @@ use crate::adapter::renderer::*;
 pub mod camera;
 pub mod quad;
 
+#[derive(getset::Getters, getset::MutGetters)]
 pub struct Viewport {
-    rendering_server: rendering_server::RenderingServer,
-    camera_context: camera::CameraContext,
     quad_render_pipeline_context: quad::QuadRenderPipelineContext,
+
+    #[getset(get = "pub", get_mut = "pub")]
+    rendering_server: rendering_server::RenderingServer,
+
+    #[getset(get = "pub", get_mut = "pub")]
+    camera_context: camera::CameraContext,
 }
 
 pub struct ViewportRenderParameters<'a> {
