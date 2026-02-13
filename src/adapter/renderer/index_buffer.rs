@@ -15,7 +15,7 @@ impl buffer::ToBuffer for [u16] {
         p_label: Option<&str>,
     ) -> Self::Output {
         IndexBuffer {
-            buffer: p_server.create_buffer(&rendering_server::BufferInitDescriptor {
+            buffer: p_server.create_buffer(&rendering_server::util::BufferInitDescriptor {
                 label: p_label,
                 contents: bytemuck::cast_slice(self),
                 usage: rendering_server::BufferUsages::INDEX,
@@ -34,7 +34,7 @@ impl buffer::ToBuffer for [u32] {
         p_label: Option<&str>,
     ) -> Self::Output {
         IndexBuffer {
-            buffer: p_server.create_buffer(&rendering_server::BufferInitDescriptor {
+            buffer: p_server.create_buffer(&rendering_server::util::BufferInitDescriptor {
                 label: p_label,
                 contents: bytemuck::cast_slice(self),
                 usage: rendering_server::BufferUsages::INDEX,

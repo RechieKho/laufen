@@ -1,6 +1,7 @@
+use super::camera;
 use crate::adapter::renderer::rendering_server::SubmitToRenderPass;
 use crate::adapter::renderer::vertex_buffer::VertexBufferElement;
-use crate::adapter::renderer::{instance, render_data, rendering_server, vertex_buffer};
+use crate::adapter::renderer::*;
 use repr_trait::C;
 
 pub use instance::Instance;
@@ -17,6 +18,8 @@ pub struct QuadVertex {
 }
 const QUAD_VERTEX_BUFFER_ATTRIBUTES: [vertex_buffer::VertexAttribute; 2] =
     vertex_buffer::vertex_attr_array![0 => Float32x3, 1 => Float32x2];
+
+impl buffer::BufferElement for QuadVertex {}
 
 impl vertex_buffer::VertexBufferElement for QuadVertex {
     fn get_vertex_buffer_layout() -> vertex_buffer::VertexBufferLayout<'static> {
@@ -66,18 +69,18 @@ impl QuadRenderPipelineContext {
         glam::Vec4::W,
     );
 
-    /// Transformation matrix that transform model to face forward (+z-axis).
-    /// the UV map from -x-axis to +x-axis horizontally, -y-axis to +y-axis vertically.
-    pub const QUAD_FORWARD_MATRIX: TransformationMatrix = TransformationMatrix::from_cols(
+    /// Transformation matrix that transform model to face backward (-z-axis).
+    /// the UV map from -x-axis to +x-axis horizontally, +y-axis to -y-axis vertically.
+    pub const QUAD_BACKWARD_MATRIX: TransformationMatrix = TransformationMatrix::from_cols(
         glam::Vec4::X,
         glam::Vec4::Z,
         glam::Vec4::NEG_Y,
         glam::Vec4::W,
     );
 
-    /// Transformation matrix that transform model to face backward (-z-axis).
-    /// the UV map from -x-axis to +x-axis horizontally, +y-axis to -y-axis vertically.
-    pub const QUAD_BACKWARD_MATRIX: TransformationMatrix = TransformationMatrix::from_cols(
+    /// Transformation matrix that transform model to face forward (+z-axis).
+    /// the UV map from -x-axis to +x-axis horizontally, -y-axis to +y-axis vertically.
+    pub const QUAD_FORWARD_MATRIX: TransformationMatrix = TransformationMatrix::from_cols(
         glam::Vec4::X,
         glam::Vec4::NEG_Z,
         glam::Vec4::Y,
@@ -89,34 +92,40 @@ impl QuadRenderPipelineContext {
     /// A quad that spans 1 by 1 unit and facing upward.
     const QUAD_VERTICES: [QuadVertex; 4] = [
         QuadVertex {
-            position: [0.5, 0.0, 0.5],
-            texture_coordinate: [1.0, 0.0],
-        },
-        QuadVertex {
             position: [-0.5, 0.0, 0.5],
-            texture_coordinate: [0.0, 0.0],
+            texture_coordinate: [1.0, 0.0],
         },
         QuadVertex {
-            position: [-0.5, 0.0, -0.5],
-            texture_coordinate: [1.0, 0.0],
+            position: [0.5, 0.0, 0.5],
+            texture_coordinate: [1.0, 1.0],
         },
         QuadVertex {
             position: [0.5, 0.0, -0.5],
-            texture_coordinate: [1.0, 1.0],
+            texture_coordinate: [1.0, 0.0],
+        },
+        QuadVertex {
+            position: [-0.5, 0.0, -0.5],
+            texture_coordinate: [0.0, 0.0],
         },
     ];
     const QUAD_INDICES: [u16; 6] = [1, 2, 3, 3, 0, 1];
 
-    pub fn new(p_server: &rendering_server::RenderingServer) -> Self {
+    pub fn new(
+        p_server: &rendering_server::RenderingServer,
+        p_camera_context: &camera::CameraContext,
+    ) -> Self {
         let mut render_data = render_data::RenderData::default();
-        render_data.add_vertex_collections(p_server, &[&Self::QUAD_VERTICES]);
+        render_data.add_vertex_collections(
+            p_server,
+            &[vertex_buffer::ToVertexBuffer(&Self::QUAD_VERTICES)],
+        );
         render_data.set_indices(p_server, Some(&Self::QUAD_INDICES));
         let shader_module =
             p_server.create_shader_module(rendering_server::include_wgsl!("quad_shader.wgsl"));
         let render_pipeline = p_server.create_pipeline(
             &rendering_server::RenderPipelineParameters {
                 shader_module: &shader_module,
-                bind_group_layout: &[],
+                bind_group_layout: &[&p_camera_context.bind_group_context().bind_group_layout],
                 vertex_entry_point: Some("vs_main"),
                 vertex_buffer_layouts: &[
                     QuadVertex::get_vertex_buffer_layout(),
@@ -138,15 +147,18 @@ impl QuadRenderPipelineContext {
         &self,
         p_server: &rendering_server::RenderingServer,
         p_render_pass: &mut rendering_server::RenderPass,
+        p_camera_context: &camera::CameraContext,
         p_instances: &[Instance],
     ) {
         let mut instance_render_data = render_data::RenderData::default();
-        instance_render_data.add_vertex_collections(p_server, &[p_instances]);
+        instance_render_data
+            .add_vertex_collections(p_server, &[vertex_buffer::ToVertexBuffer(p_instances)]);
         instance_render_data.vertex_buffer_slot_offset = 1;
 
         p_render_pass.set_pipeline(&self.render_pipeline);
         self.render_data.submit(p_render_pass);
         instance_render_data.submit(p_render_pass);
+        [p_camera_context.bind_group_context()].submit(p_render_pass);
         p_render_pass.draw_indexed(
             0..Self::QUAD_INDICES.len() as _,
             0,

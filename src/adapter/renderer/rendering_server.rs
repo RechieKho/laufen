@@ -4,72 +4,28 @@ use std::num::NonZero;
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
 
-pub use wgpu::include_wgsl;
-pub use wgpu::util::BufferInitDescriptor;
-pub use wgpu::BindGroup;
-pub use wgpu::BindGroupDescriptor;
-pub use wgpu::BindGroupEntry;
-pub use wgpu::BindGroupLayout;
-pub use wgpu::BindGroupLayoutDescriptor;
-pub use wgpu::BindingResource;
-pub use wgpu::BindingType;
-pub use wgpu::BlendState;
-pub use wgpu::Buffer;
-pub use wgpu::BufferUsages;
-pub use wgpu::Color;
-pub use wgpu::ColorTargetState;
-pub use wgpu::ColorWrites;
-pub use wgpu::CommandEncoder;
-pub use wgpu::CompareFunction;
-pub use wgpu::DepthBiasState;
-pub use wgpu::DepthStencilState;
-pub use wgpu::DeviceDescriptor;
-pub use wgpu::Face;
-pub use wgpu::FrontFace;
-pub use wgpu::IndexFormat;
-pub use wgpu::InstanceDescriptor;
-pub use wgpu::LoadOp;
-pub use wgpu::MultisampleState;
-pub use wgpu::Operations;
-pub use wgpu::PipelineCache;
-pub use wgpu::PipelineCompilationOptions;
-pub use wgpu::PolygonMode;
-pub use wgpu::PowerPreference;
-pub use wgpu::PrimitiveState;
-pub use wgpu::PrimitiveTopology;
-pub use wgpu::QuerySet;
-pub use wgpu::RenderPass;
-pub use wgpu::RenderPassDepthStencilAttachment;
-pub use wgpu::RenderPassDescriptor;
-pub use wgpu::RenderPassTimestampWrites;
-pub use wgpu::RenderPipeline;
-pub use wgpu::Sampler;
-pub use wgpu::ShaderModule;
-pub use wgpu::ShaderModuleDescriptor;
-pub use wgpu::ShaderStages;
-pub use wgpu::StencilState;
-pub use wgpu::StoreOp;
-pub use wgpu::SurfaceError;
-pub use wgpu::Texture;
-pub use wgpu::TextureFormat;
-pub use wgpu::TextureSampleType;
-pub use wgpu::TextureUsages;
-pub use wgpu::TextureView;
-pub use wgpu::TextureViewDimension;
-pub use wgpu::VertexBufferLayout;
+pub use wgpu::*;
 
 /// Submit to render pass.
 pub trait SubmitToRenderPass {
     fn submit<'a>(&self, p_render_pass: &mut RenderPass<'a>);
 }
 
+/// Submit to queue.
+pub trait SubmitToQueue {
+    fn submit(&self, p_queue: &Queue);
+}
+
 /// Central server for rendering.
+#[derive(getset::Getters, getset::MutGetters)]
 pub struct RenderingServer {
-    surface: wgpu::Surface<'static>,
-    surface_configuration: wgpu::SurfaceConfiguration,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
+    surface: Surface<'static>,
+    surface_configuration: SurfaceConfiguration,
+    device: Device,
     window: Arc<winit::window::Window>,
+
+    #[getset(get = "pub", get_mut = "pub")]
+    queue: Queue,
 
     depth_texture_context: Option<texture::TextureContext>,
 }
@@ -95,18 +51,18 @@ impl<'a> Default for RenderingServerBuilder<'a> {
     fn default() -> Self {
         Self {
             instance_descriptor: InstanceDescriptor {
-                backends: wgpu::Backends::PRIMARY,
+                backends: Backends::PRIMARY,
                 ..Default::default()
             },
             adapter_power_preference: PowerPreference::default(),
             adapter_force_fallback_adapter: false,
             device_descriptor: DeviceDescriptor {
                 label: None,
-                required_features: wgpu::Features::empty(),
-                experimental_features: wgpu::ExperimentalFeatures::disabled(),
-                required_limits: { wgpu::Limits::default() },
+                required_features: Features::empty(),
+                experimental_features: ExperimentalFeatures::disabled(),
+                required_limits: { Limits::default() },
                 memory_hints: Default::default(),
-                trace: wgpu::Trace::Off,
+                trace: Trace::Off,
             },
             surface_configuration_usage: TextureUsages::RENDER_ATTACHMENT,
             surface_configuration_view_formats: vec![],
@@ -122,12 +78,12 @@ impl<'a> RenderingServerBuilder<'a> {
     ) -> anyhow::Result<RenderingServer> {
         let size = p_parameter.window.inner_size();
 
-        let instance = wgpu::Instance::new(&self.instance_descriptor);
+        let instance = Instance::new(&self.instance_descriptor);
 
         let surface = instance.create_surface(p_parameter.window.clone()).unwrap();
 
         let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
+            .request_adapter(&RequestAdapterOptions {
                 power_preference: self.adapter_power_preference,
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: self.adapter_force_fallback_adapter,
@@ -145,7 +101,7 @@ impl<'a> RenderingServerBuilder<'a> {
             .copied()
             .unwrap_or(surface_capabilities.formats[0]);
 
-        let surface_configuration = wgpu::SurfaceConfiguration {
+        let surface_configuration = SurfaceConfiguration {
             usage: self.surface_configuration_usage,
             format: surface_format,
             width: size.width,
@@ -292,7 +248,7 @@ impl<'a> TypicalRenderPassBuilder<'a> {
     ) -> RenderPass<'a> {
         p_encoder.begin_render_pass(&RenderPassDescriptor {
             label: self.label,
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            color_attachments: &[Some(RenderPassColorAttachment {
                 view: p_view,
                 resolve_target: self.color_attachment_resolve_target,
                 ops: self.color_attachment_operations,
@@ -315,7 +271,7 @@ impl<'a> TypicalRenderPassBuilder<'a> {
 impl RenderingServer {
     const DEPTH_TEXTURE_FORMAT: TextureFormat = TextureFormat::Depth32Float;
 
-    pub fn create_buffer(&self, p_descriptor: &BufferInitDescriptor) -> Buffer {
+    pub fn create_buffer(&self, p_descriptor: &util::BufferInitDescriptor) -> Buffer {
         self.device.create_buffer_init(p_descriptor)
     }
 
@@ -354,31 +310,31 @@ impl RenderingServer {
         let rgba = p_image.to_rgba8();
         let dimensions = p_image.dimensions();
 
-        let size = wgpu::Extent3d {
+        let size = Extent3d {
             width: dimensions.0,
             height: dimensions.1,
             depth_or_array_layers: 1,
         };
-        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+        let texture = self.device.create_texture(&TextureDescriptor {
             label: p_label,
             size,
             mip_level_count: 1,
             sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            dimension: TextureDimension::D2,
+            format: TextureFormat::Rgba8UnormSrgb,
+            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
             view_formats: &[],
         });
 
         self.queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                aspect: wgpu::TextureAspect::All,
+            TexelCopyTextureInfo {
+                aspect: TextureAspect::All,
                 texture: &texture,
                 mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
+                origin: Origin3d::ZERO,
             },
             &rgba,
-            wgpu::TexelCopyBufferLayout {
+            TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(4 * dimensions.0),
                 rows_per_image: Some(dimensions.1),
@@ -386,14 +342,14 @@ impl RenderingServer {
             size,
         );
 
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+        let view = texture.create_view(&TextureViewDescriptor::default());
+        let sampler = self.device.create_sampler(&SamplerDescriptor {
+            address_mode_u: AddressMode::ClampToEdge,
+            address_mode_v: AddressMode::ClampToEdge,
+            address_mode_w: AddressMode::ClampToEdge,
+            mag_filter: FilterMode::Linear,
+            min_filter: FilterMode::Nearest,
+            mipmap_filter: MipmapFilterMode::Nearest,
             ..Default::default()
         });
 
@@ -409,33 +365,33 @@ impl RenderingServer {
         p_label: Option<&str>,
         p_depth_format: TextureFormat,
     ) -> texture::TextureContext {
-        let size = wgpu::Extent3d {
+        let size = Extent3d {
             // 2.
             width: self.surface_configuration.width.max(1),
             height: self.surface_configuration.height.max(1),
             depth_or_array_layers: 1,
         };
-        let desc = wgpu::TextureDescriptor {
+        let desc = TextureDescriptor {
             label: p_label,
             size,
             mip_level_count: 1,
             sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
+            dimension: TextureDimension::D2,
             format: p_depth_format,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         };
         let texture = self.device.create_texture(&desc);
 
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            mipmap_filter: wgpu::MipmapFilterMode::Nearest,
-            compare: Some(wgpu::CompareFunction::LessEqual),
+        let view = texture.create_view(&TextureViewDescriptor::default());
+        let sampler = self.device.create_sampler(&SamplerDescriptor {
+            address_mode_u: AddressMode::ClampToEdge,
+            address_mode_v: AddressMode::ClampToEdge,
+            address_mode_w: AddressMode::ClampToEdge,
+            mag_filter: FilterMode::Linear,
+            min_filter: FilterMode::Linear,
+            mipmap_filter: MipmapFilterMode::Nearest,
+            compare: Some(CompareFunction::LessEqual),
             lod_min_clamp: 0.0,
             lod_max_clamp: 100.0,
             ..Default::default()
@@ -480,29 +436,29 @@ impl RenderingServer {
     ) -> RenderPipeline {
         let render_pipeline_layout =
             self.device
-                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                .create_pipeline_layout(&PipelineLayoutDescriptor {
                     label: p_options.pipeline_layout_label,
                     bind_group_layouts: p_parameters.bind_group_layout,
                     immediate_size: p_options.immediate_size,
                 });
 
-        let default_color_target_state = &[Some(wgpu::ColorTargetState {
+        let default_color_target_state = &[Some(ColorTargetState {
             format: self.surface_configuration.format,
             blend: p_options.fragment_default_color_target_blend,
             write_mask: p_options.fragment_default_color_target_write_mask,
         })];
 
         self.device
-            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            .create_render_pipeline(&RenderPipelineDescriptor {
                 label: p_options.pipeline_label,
                 layout: Some(&render_pipeline_layout),
-                vertex: wgpu::VertexState {
+                vertex: VertexState {
                     module: p_parameters.shader_module,
                     entry_point: p_parameters.vertex_entry_point,
                     buffers: p_parameters.vertex_buffer_layouts,
                     compilation_options: p_options.vertex_state_compilation_option.clone(),
                 },
-                fragment: Some(wgpu::FragmentState {
+                fragment: Some(FragmentState {
                     module: p_parameters.shader_module,
                     entry_point: p_parameters.fragment_entry_point,
                     targets: if let Some(targets) = p_parameters.overriding_color_targets {
@@ -510,7 +466,7 @@ impl RenderingServer {
                     } else {
                         default_color_target_state
                     },
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    compilation_options: PipelineCompilationOptions::default(),
                 }),
                 primitive: p_options.primitive,
                 depth_stencil: Some(DepthStencilState {
@@ -535,11 +491,11 @@ impl RenderingServer {
         let output = self.surface.get_current_texture()?;
         let view = output
             .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
+            .create_view(&TextureViewDescriptor::default());
 
         let mut encoder = self
             .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            .create_command_encoder(&CommandEncoderDescriptor {
                 label: Some("Render Encoder"),
             });
 

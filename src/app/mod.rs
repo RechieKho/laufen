@@ -1,4 +1,4 @@
-use crate::app::viewport::quad;
+use viewport::quad;
 
 pub mod viewport;
 

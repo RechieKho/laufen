@@ -30,9 +30,9 @@ impl RenderData {
     pub fn add_vertex_collections<V>(
         &mut self,
         p_server: &rendering_server::RenderingServer,
-        p_vertex_collections: &[&[V]],
+        p_vertex_collections: &[V],
     ) where
-        [V]: buffer::ToBuffer<Output = vertex_buffer::VertexBuffer>,
+        V: buffer::ToBuffer<Output = vertex_buffer::VertexBuffer>,
     {
         self.vertex_buffers.extend(
             p_vertex_collections

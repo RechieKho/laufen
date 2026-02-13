@@ -1,6 +1,8 @@
 use repr_trait::C;
 use std::mem;
 
+use crate::adapter::renderer::buffer;
+
 use super::vertex_buffer;
 
 pub type TransformationMatrix = glam::Mat4;
@@ -13,6 +15,8 @@ pub struct Instance {
 }
 
 const INSTANCE_BUFFER_ATTRIBUTES: [vertex_buffer::VertexAttribute; 4] = vertex_buffer::vertex_attr_array![5 => Float32x4, 6 => Float32x4, 7 => Float32x4, 8 => Float32x4];
+
+impl buffer::BufferElement for Instance {}
 
 impl vertex_buffer::VertexBufferElement for Instance {
     fn get_vertex_buffer_layout() -> vertex_buffer::VertexBufferLayout<'static> {

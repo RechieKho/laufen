@@ -9,7 +9,7 @@ pub use wgpu::VertexAttribute;
 pub use wgpu::VertexBufferLayout;
 pub use wgpu::VertexStepMode;
 
-pub trait VertexBufferElement: repr_trait::C + bytemuck::Pod + bytemuck::Zeroable {
+pub trait VertexBufferElement: buffer::BufferElement {
     fn get_vertex_buffer_layout() -> wgpu::VertexBufferLayout<'static>;
 }
 
@@ -24,6 +24,8 @@ pub struct SimpleVertex {
 }
 const SIMPLE_VERTEX_BUFFER_ATTRIBUTES: [VertexAttribute; 2] =
     vertex_attr_array![0 => Float32x3, 1 => Float32x2];
+
+impl buffer::BufferElement for SimpleVertex {}
 
 impl VertexBufferElement for SimpleVertex {
     fn get_vertex_buffer_layout() -> VertexBufferLayout<'static> {
@@ -51,7 +53,11 @@ impl std::ops::DerefMut for VertexBuffer {
     }
 }
 
-impl<T> buffer::ToBuffer for [T]
+pub struct ToVertexBuffer<'a, T>(pub &'a [T])
+where
+    T: VertexBufferElement;
+
+impl<'a, T> buffer::ToBuffer for ToVertexBuffer<'a, T>
 where
     T: VertexBufferElement,
 {
@@ -63,9 +69,9 @@ where
         p_label: Option<&str>,
     ) -> Self::Output {
         VertexBuffer(
-            p_server.create_buffer(&rendering_server::BufferInitDescriptor {
+            p_server.create_buffer(&rendering_server::util::BufferInitDescriptor {
                 label: p_label,
-                contents: bytemuck::cast_slice(self),
+                contents: bytemuck::cast_slice(self.0),
                 usage: rendering_server::BufferUsages::VERTEX,
             }),
         )

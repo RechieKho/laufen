@@ -9,3 +9,5 @@ pub trait ToBuffer {
         p_label: Option<&str>,
     ) -> Self::Output;
 }
+
+pub trait BufferElement: repr_trait::C + bytemuck::Pod + bytemuck::Zeroable {}

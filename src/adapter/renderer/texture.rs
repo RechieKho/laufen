@@ -9,24 +9,26 @@ pub struct TextureContext {
 
 impl bind_group::ToBindGroupContext for TextureContext {
     const BIND_GROUP_LAYOUT_DESCRIPTOR: rendering_server::BindGroupLayoutDescriptor<'static> =
-        wgpu::BindGroupLayoutDescriptor {
+        rendering_server::BindGroupLayoutDescriptor {
             entries: &[
-                wgpu::BindGroupLayoutEntry {
+                rendering_server::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
+                    visibility: rendering_server::ShaderStages::FRAGMENT,
+                    ty: rendering_server::BindingType::Texture {
                         multisampled: false,
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: rendering_server::TextureViewDimension::D2,
+                        sample_type: rendering_server::TextureSampleType::Float {
+                            filterable: true,
+                        },
                     },
                     count: None,
                 },
-                wgpu::BindGroupLayoutEntry {
+                rendering_server::BindGroupLayoutEntry {
                     binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    visibility: rendering_server::ShaderStages::FRAGMENT,
                     // This should match the filterable field of the
                     // corresponding Texture entry above.
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    ty: rendering_server::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
                 },
             ],
@@ -56,6 +58,7 @@ impl bind_group::ToBindGroupContext for TextureContext {
         bind_group::BindGroupContext {
             bind_group_layout: layout,
             bind_group,
+            bind_group_offset: 0,
         }
     }
 }

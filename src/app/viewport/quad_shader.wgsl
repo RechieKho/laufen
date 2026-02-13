@@ -15,6 +15,13 @@ struct VertexOutput {
   @location(0) texture_coordinate: vec2<f32>,
 };
 
+struct CameraUniform {
+  transformation_matrix: mat4x4<f32>,
+};
+
+@group(0) @binding(0)
+var<uniform> camera_uniform: CameraUniform;
+
 @vertex
 fn vs_main(
   model: VertexInput,
@@ -28,7 +35,7 @@ fn vs_main(
   );
 
   var out: VertexOutput;
-  out.position = instance_transformation * vec4<f32>(model.position.xyz, 1.0);
+  out.position = camera_uniform.transformation_matrix * instance_transformation * vec4<f32>(model.position.xyz, 1.0);
   out.texture_coordinate = model.texture_coordinate;
   return out;
 }

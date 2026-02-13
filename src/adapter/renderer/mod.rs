@@ -10,6 +10,7 @@ pub mod instance;
 pub mod render_data;
 pub mod rendering_server;
 pub mod texture;
+pub mod uniform_buffer;
 pub mod vertex_buffer;
 
 pub struct SampleRenderingContext {
@@ -52,8 +53,14 @@ impl SampleRenderingContext {
         ] as Vec<instance::Instance>;
 
         let mut data = render_data::RenderData::default();
-        data.add_vertex_collections(p_server, &[&Self::TRIANGLE_VERTICES]);
-        data.add_vertex_collections(p_server, &[instances.as_slice()]);
+        data.add_vertex_collections(
+            p_server,
+            &[vertex_buffer::ToVertexBuffer(&Self::TRIANGLE_VERTICES)],
+        );
+        data.add_vertex_collections(
+            p_server,
+            &[vertex_buffer::ToVertexBuffer(instances.as_slice())],
+        );
         data.set_indices(p_server, Some(&Self::TRIANGLE_INDICES));
 
         let texture_context = p_server.load_sample_image()?;
