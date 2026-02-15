@@ -1,42 +1,17 @@
-use oktree::prelude::*;
+use voxelis::{
+    spatial::{VoxOpsBatch, VoxOpsRead, VoxOpsWrite, VoxTree},
+    MaxDepth, VoxInterner,
+};
 
-pub fn run_sample_block() -> Result<(), TreeError> {
-    let aabb = Aabb::new(TUVec3::splat(16), 16u8);
-    let mut tree = Octree::from_aabb_with_capacity(aabb?, 10);
+pub fn run_sample_block() -> anyhow::Result<()> {
+    let mut interner = VoxInterner::<u8>::with_memory_budget(256 * 1024 * 1024);
+    let mut tree = VoxTree::new(MaxDepth::new(5)); // 32³ voxels (chunk)
 
-    let c1 = SampleBlock::new(TUVec3::splat(1u8));
-    let c2 = SampleBlock::new(TUVec3::splat(8u8));
+    let mut batch = tree.create_batch();
+    batch.set(&mut interner, glam::IVec3::new(3, 0, 4), 1); // stone
 
-    let c1_id = tree.insert(c1)?;
-    let c2_id = tree.insert(c2)?;
-
-    // Searching by position
-    assert_eq!(tree.find(&TUVec3::new(1, 1, 1)), Some(c1_id));
-    assert_eq!(tree.find(&TUVec3::new(8, 8, 8)), Some(c2_id));
-    assert_eq!(tree.find(&TUVec3::new(1, 2, 8)), None);
-    assert_eq!(tree.find(&TUVec3::splat(100)), None);
-
-    assert_eq!(
-        tree.intersect_with(|p_element| p_element.contains(&TUVec3::splat(1u8))),
-        vec![c1_id]
-    );
+    tree.apply_batch(&mut interner, &batch);
+    assert_eq!(tree.get(&interner, glam::IVec3::new(3, 0, 4)), Some(1));
 
     Ok(())
-}
-
-struct SampleBlock {
-    position: TUVec3<u8>,
-}
-
-impl Position for SampleBlock {
-    type U = u8;
-    fn position(&self) -> TUVec3<u8> {
-        self.position
-    }
-}
-
-impl SampleBlock {
-    fn new(position: TUVec3<u8>) -> Self {
-        SampleBlock { position }
-    }
 }

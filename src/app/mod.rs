@@ -77,12 +77,16 @@ impl winit::application::ApplicationHandler<()> for App {
                 });
             } else if self.input.key_held(winit::keyboard::KeyCode::KeyA) {
                 viewport.set_camera_properties(viewport::PartialViewportCameraProperties {
-                    direction: Some(camera_properties.direction.rotate_y(ANGULAR_SPEED)),
+                    direction: Some(
+                        glam::Mat3::from_rotation_y(ANGULAR_SPEED) * camera_properties.direction,
+                    ),
                     ..Default::default()
                 });
             } else if self.input.key_held(winit::keyboard::KeyCode::KeyD) {
                 viewport.set_camera_properties(viewport::PartialViewportCameraProperties {
-                    direction: Some(camera_properties.direction.rotate_y(-ANGULAR_SPEED)),
+                    direction: Some(
+                        glam::Mat3::from_rotation_y(-ANGULAR_SPEED) * camera_properties.direction,
+                    ),
                     ..Default::default()
                 });
             }
