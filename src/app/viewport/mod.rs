@@ -1,7 +1,9 @@
 use crate::adapter::renderer::rendering_server::SubmitToQueue;
 use crate::adapter::renderer::*;
+use crate::app::viewport::grid_texture_atlas::GridTextureAtlasBuilderParameters;
 
 pub mod camera;
+pub mod grid_texture_atlas;
 pub mod quad;
 
 #[derive(getset::Getters, getset::MutGetters)]
@@ -49,8 +51,14 @@ impl Viewport {
             builder.build(rendering_server::RenderingServerBuilderParameters { window }),
         )?;
         let mut camera_context = camera::CameraContext::new(&rendering_server);
-        let quad_render_pipeline_context =
-            quad::QuadRenderPipelineContext::new(&rendering_server, &camera_context);
+        let texture_atlas_builder = grid_texture_atlas::GridTextureAtlasBuilder::default();
+        let quad_render_pipeline_context = quad::QuadRenderPipelineContext::new(
+            &rendering_server,
+            &camera_context,
+            texture_atlas_builder.build(GridTextureAtlasBuilderParameters {
+                server: &rendering_server,
+            })?,
+        );
         camera_context.properties.aspect_ratio =
             window_size.width as f32 / window_size.height as f32;
 

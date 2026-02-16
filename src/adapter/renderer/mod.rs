@@ -1,7 +1,4 @@
-use super::renderer::{
-    bind_group::ToBindGroupContext, rendering_server::SubmitToRenderPass,
-    vertex_buffer::VertexBufferElement,
-};
+use super::renderer::{rendering_server::SubmitToRenderPass, vertex_buffer::VertexBufferElement};
 
 pub mod bind_group;
 pub mod buffer;
@@ -15,8 +12,7 @@ pub mod vertex_buffer;
 
 pub struct SampleRenderingContext {
     pub data: render_data::RenderData,
-    pub texture_context: texture::TextureContext,
-    pub texture_bind_group_context: bind_group::BindGroupContext,
+    pub bounded_texture_context: texture::BoundedTextureContext,
     pub shader_module: rendering_server::ShaderModule,
     pub render_pipeline: rendering_server::RenderPipeline,
     pub instances: Vec<instance::Instance>,
@@ -64,13 +60,16 @@ impl SampleRenderingContext {
         data.set_indices(p_server, Some(&Self::TRIANGLE_INDICES));
 
         let texture_context = p_server.load_sample_texture()?;
-        let texture_bind_group_context =
-            texture_context.to_bind_group_context(p_server, Some("Texture bind group"));
+        let bounded_texture_context =
+            texture::BoundedTextureContext::new(p_server, texture_context);
+
         let shader_module = p_server.create_sample_shader_module();
         let render_pipeline = p_server.create_pipeline(
             &rendering_server::RenderPipelineParameters {
                 shader_module: &shader_module,
-                bind_group_layout: &[&texture_bind_group_context.bind_group_layout],
+                bind_group_layout: &[&bounded_texture_context
+                    .bind_group_context()
+                    .bind_group_layout],
                 vertex_entry_point: Some("vs_main"),
                 vertex_buffer_layouts: &[
                     vertex_buffer::SimpleVertex::get_vertex_buffer_layout(),
@@ -85,8 +84,7 @@ impl SampleRenderingContext {
         Ok(SampleRenderingContext {
             data,
             shader_module,
-            texture_context,
-            texture_bind_group_context,
+            bounded_texture_context,
             render_pipeline,
             instances,
         })
@@ -101,7 +99,7 @@ impl SampleRenderingContext {
             &mut |_p_server: &rendering_server::RenderingServer,
                   p_render_pass: &mut rendering_server::RenderPass| {
                 p_render_pass.set_pipeline(&self.render_pipeline);
-                [&self.texture_bind_group_context].submit(p_render_pass);
+                [self.bounded_texture_context.bind_group_context()].submit(p_render_pass);
                 self.data.submit(p_render_pass);
                 p_render_pass.draw_indexed(
                     0..Self::TRIANGLE_INDICES.len() as _,

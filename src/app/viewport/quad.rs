@@ -1,4 +1,5 @@
 use super::camera;
+use super::grid_texture_atlas;
 use crate::adapter::renderer::rendering_server::SubmitToRenderPass;
 use crate::adapter::renderer::vertex_buffer::VertexBufferElement;
 use crate::adapter::renderer::*;
@@ -35,6 +36,7 @@ impl vertex_buffer::VertexBufferElement for QuadVertex {
 pub struct QuadRenderPipelineContext {
     render_pipeline: rendering_server::RenderPipeline,
     render_data: render_data::RenderData,
+    texture_atlas: grid_texture_atlas::GridTextureAtlas,
 }
 
 impl QuadRenderPipelineContext {
@@ -113,6 +115,7 @@ impl QuadRenderPipelineContext {
     pub fn new(
         p_server: &rendering_server::RenderingServer,
         p_camera_context: &camera::CameraContext,
+        p_texture_atlas: grid_texture_atlas::GridTextureAtlas,
     ) -> Self {
         let mut render_data = render_data::RenderData::default();
         render_data.add_vertex_collections(
@@ -125,7 +128,17 @@ impl QuadRenderPipelineContext {
         let render_pipeline = p_server.create_pipeline(
             &rendering_server::RenderPipelineParameters {
                 shader_module: &shader_module,
-                bind_group_layout: &[&p_camera_context.bind_group_context().bind_group_layout],
+                bind_group_layout: &[
+                    &p_camera_context.bind_group_context().bind_group_layout,
+                    &p_texture_atlas
+                        .division_context
+                        .bind_group_context()
+                        .bind_group_layout,
+                    &p_texture_atlas
+                        .bounded_texture_context
+                        .bind_group_context()
+                        .bind_group_layout,
+                ],
                 vertex_entry_point: Some("vs_main"),
                 vertex_buffer_layouts: &[
                     QuadVertex::get_vertex_buffer_layout(),
@@ -140,6 +153,7 @@ impl QuadRenderPipelineContext {
         Self {
             render_data,
             render_pipeline,
+            texture_atlas: p_texture_atlas,
         }
     }
 
@@ -158,7 +172,14 @@ impl QuadRenderPipelineContext {
         p_render_pass.set_pipeline(&self.render_pipeline);
         self.render_data.submit(p_render_pass);
         instance_render_data.submit(p_render_pass);
-        [p_camera_context.bind_group_context()].submit(p_render_pass);
+        [
+            p_camera_context.bind_group_context(),
+            self.texture_atlas.division_context.bind_group_context(),
+            self.texture_atlas
+                .bounded_texture_context
+                .bind_group_context(),
+        ]
+        .submit(p_render_pass);
         p_render_pass.draw_indexed(
             0..Self::QUAD_INDICES.len() as _,
             0,

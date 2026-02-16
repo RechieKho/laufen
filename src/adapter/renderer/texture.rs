@@ -1,3 +1,5 @@
+use crate::adapter::renderer::bind_group::ToBindGroupContext;
+
 use super::bind_group;
 use super::rendering_server;
 
@@ -59,6 +61,29 @@ impl bind_group::ToBindGroupContext for TextureContext {
             bind_group_layout: layout,
             bind_group,
             bind_group_offset: 0,
+        }
+    }
+}
+
+#[derive(getset::Getters, getset::MutGetters)]
+pub struct BoundedTextureContext {
+    #[getset(get = "pub", get_mut = "pub")]
+    texture_context: TextureContext,
+
+    #[getset(get = "pub", get_mut = "pub")]
+    bind_group_context: bind_group::BindGroupContext,
+}
+
+impl BoundedTextureContext {
+    pub fn new(
+        p_server: &rendering_server::RenderingServer,
+        p_texture_context: TextureContext,
+    ) -> Self {
+        let bind_group_context =
+            p_texture_context.to_bind_group_context(p_server, Some("Bounded texture"));
+        Self {
+            texture_context: p_texture_context,
+            bind_group_context,
         }
     }
 }

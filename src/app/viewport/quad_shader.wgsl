@@ -19,8 +19,15 @@ struct CameraUniform {
   transformation_matrix: mat4x4<f32>,
 };
 
+struct GridTextureDivisionUniform {
+  division: u32
+};
+
 @group(0) @binding(0)
 var<uniform> camera_uniform: CameraUniform;
+
+@group(1) @binding(0)
+var<uniform> grid_texture_division_uniform: GridTextureDivisionUniform;
 
 @vertex
 fn vs_main(
@@ -40,7 +47,12 @@ fn vs_main(
   return out;
 }
 
+@group(2) @binding(0)
+var grid_texture: texture_2d<f32>;
+@group(2) @binding(1)
+var grid_texture_sampler: sampler;
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-  return vec4<f32>(0.7, 0.7, 0.7, 1.0);
+  return textureSample(grid_texture, grid_texture_sampler, in.texture_coordinate);
 }
