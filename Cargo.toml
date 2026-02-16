@@ -23,4 +23,6 @@ shipyard = "0.11.0"
 getset = "0.1.6"
 winit_input_helper = "0.17.0"
 num-traits = "0.2.19"
+stringid = "0.1.1"
+cityhasher = "0.1.0"
 

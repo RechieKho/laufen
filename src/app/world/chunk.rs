@@ -1,6 +1,6 @@
-use super::block;
 use super::morton;
 use super::morton::Morton;
+use super::slot;
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
 pub struct ChunkKey(glam::UVec3);
@@ -45,65 +45,62 @@ impl Ord for ChunkKey {
     }
 }
 
-pub trait ChunkLoader<T: block::Block> {
-    fn load_chunk(p_key: ChunkKey) -> Chunk<T>;
+pub trait ChunkLoader {
+    fn load_chunk(p_key: ChunkKey) -> Chunk;
 }
 
-pub trait ChunkSaver<T: block::Block> {
-    fn save_chunk(p_key: ChunkKey, p_chunk: &Chunk<T>);
+pub trait ChunkSaver {
+    fn save_chunk(p_key: ChunkKey, p_chunk: &Chunk);
 }
 
 pub type ChunkMorton = morton::Morton4;
 
-pub struct Chunk<T: block::Block> {
-    blocks: [T; ChunkMorton::MAX as _],
+pub struct Chunk {
+    slots: [slot::Slot; ChunkMorton::MAX as _],
 }
 
-impl<T: block::Block> Default for Chunk<T> {
+impl Default for Chunk {
     fn default() -> Self {
         Self {
-            blocks: [T::default(); ChunkMorton::MAX as _],
+            slots: [slot::Slot::default(); ChunkMorton::MAX as _],
         }
     }
 }
 
-impl<T: block::Block> Chunk<T> {
-    pub fn get(&self, p_code: u16) -> &T {
-        &self.blocks[p_code as usize]
+impl Chunk {
+    pub fn get(&self, p_code: u16) -> &slot::Slot {
+        &self.slots[p_code as usize]
     }
 
-    pub fn get_mut(&mut self, p_code: u16) -> &mut T {
-        &mut self.blocks[p_code as usize]
+    pub fn get_mut(&mut self, p_code: u16) -> &mut slot::Slot {
+        &mut self.slots[p_code as usize]
     }
 
-    pub fn get_from_position(&self, p_position: glam::UVec3) -> &T {
+    pub fn get_from_position(&self, p_position: glam::UVec3) -> &slot::Slot {
         let (code, _) = ChunkMorton::consume(p_position);
-        &self.blocks[code as usize]
+        &self.slots[code as usize]
     }
 
-    pub fn get_from_position_mut(&mut self, p_position: glam::UVec3) -> &mut T {
+    pub fn get_from_position_mut(&mut self, p_position: glam::UVec3) -> &mut slot::Slot {
         let (code, _) = ChunkMorton::consume(p_position);
-        &mut self.blocks[code as usize]
+        &mut self.slots[code as usize]
     }
 }
 
-pub type ChunkMap<T> = std::collections::BTreeMap<ChunkKey, Chunk<T>>;
+pub type ChunkMap = std::collections::BTreeMap<ChunkKey, Chunk>;
 
 pub struct SampleChunkLoader();
 
-impl<T: block::Block> ChunkLoader<T> for SampleChunkLoader {
-    fn load_chunk(_p_key: ChunkKey) -> Chunk<T> {
-        // Just spawn one block.
-        let mut chunk = Chunk::<T>::default();
-        *chunk.get_from_position_mut(glam::UVec3::ZERO) = T::default_filled();
-        chunk
+impl ChunkLoader for SampleChunkLoader {
+    fn load_chunk(_p_key: ChunkKey) -> Chunk {
+        Chunk::default()
     }
 }
 
 pub struct SampleChunkSaver();
 
-impl<T: block::Block> ChunkSaver<T> for SampleChunkSaver {
-    fn save_chunk(_p_key: ChunkKey, _p_chunk: &Chunk<T>) {
+impl ChunkSaver for SampleChunkSaver {
+    fn save_chunk(_p_key: ChunkKey, _p_chunk: &Chunk) {
         // Ignored...
     }
 }

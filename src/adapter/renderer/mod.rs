@@ -63,7 +63,7 @@ impl SampleRenderingContext {
         );
         data.set_indices(p_server, Some(&Self::TRIANGLE_INDICES));
 
-        let texture_context = p_server.load_sample_image()?;
+        let texture_context = p_server.load_sample_texture()?;
         let texture_bind_group_context =
             texture_context.to_bind_group_context(p_server, Some("Texture bind group"));
         let shader_module = p_server.create_sample_shader_module();

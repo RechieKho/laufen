@@ -1,21 +1,18 @@
 use morton::Morton;
 
-pub mod block;
 pub mod chunk;
+pub mod cube;
 pub mod morton;
+pub mod slot;
 
-pub struct World<T: block::Block> {
-    chunk_map: chunk::ChunkMap<T>,
+pub struct World {
+    chunk_map: chunk::ChunkMap,
 }
 
-impl<T: block::Block> World<T> {
+impl World {
     const MAX_CHUNK_CHEBYSHEV_DISTANCE: u32 = 7;
 
-    fn load<L, S>(&mut self, p_key: chunk::ChunkKey)
-    where
-        L: chunk::ChunkLoader<T>,
-        S: chunk::ChunkSaver<T>,
-    {
+    fn load<L: chunk::ChunkLoader, S: chunk::ChunkSaver>(&mut self, p_key: chunk::ChunkKey) {
         self.chunk_map.insert(p_key, L::load_chunk(p_key));
 
         let interest_chunk_position: glam::UVec3 = p_key.into();
@@ -31,11 +28,10 @@ impl<T: block::Block> World<T> {
         });
     }
 
-    pub fn get_block<L, S>(&mut self, p_position: glam::UVec3) -> &T
-    where
-        L: chunk::ChunkLoader<T>,
-        S: chunk::ChunkSaver<T>,
-    {
+    pub fn get_block<L: chunk::ChunkLoader, S: chunk::ChunkSaver>(
+        &mut self,
+        p_position: glam::UVec3,
+    ) -> &slot::Slot {
         let (code, remained) = chunk::ChunkMorton::consume(p_position);
         let key = chunk::ChunkKey::from(remained);
         if !self.chunk_map.contains_key(&key) {
@@ -45,11 +41,10 @@ impl<T: block::Block> World<T> {
         chunk.get(code)
     }
 
-    pub fn get_block_mut<L, S>(&mut self, p_position: glam::UVec3) -> &mut T
-    where
-        L: chunk::ChunkLoader<T>,
-        S: chunk::ChunkSaver<T>,
-    {
+    pub fn get_block_mut<L: chunk::ChunkLoader, S: chunk::ChunkSaver>(
+        &mut self,
+        p_position: glam::UVec3,
+    ) -> &mut slot::Slot {
         let (code, remained) = chunk::ChunkMorton::consume(p_position);
         let key = chunk::ChunkKey::from(remained);
         if !self.chunk_map.contains_key(&key) {

@@ -288,21 +288,21 @@ impl RenderingServer {
         self.resize(size.width, size.height);
     }
 
-    pub fn load_sample_image(&self) -> anyhow::Result<texture::TextureContext> {
+    pub fn load_sample_texture(&self) -> anyhow::Result<texture::TextureContext> {
         let default_sample_bytes = include_bytes!("sample_image.png");
-        self.load_image_from_bytes(default_sample_bytes, Some("Sample image"))
+        self.load_texture_from_image_bytes(default_sample_bytes, Some("Sample image"))
     }
 
-    pub fn load_image_from_bytes(
+    pub fn load_texture_from_image_bytes(
         &self,
         p_bytes: &[u8],
         p_label: Option<&str>,
     ) -> anyhow::Result<texture::TextureContext> {
         let image = image::load_from_memory(p_bytes)?;
-        self.load_image(&image, p_label)
+        self.load_texture_from_image(&image, p_label)
     }
 
-    pub fn load_image(
+    pub fn load_texture_from_image(
         &self,
         p_image: &image::DynamicImage,
         p_label: Option<&str>,
@@ -360,7 +360,7 @@ impl RenderingServer {
         })
     }
 
-    pub fn load_depth(
+    pub fn load_depth_texture(
         &self,
         p_label: Option<&str>,
         p_depth_format: TextureFormat,
@@ -406,7 +406,7 @@ impl RenderingServer {
 
     fn update_depth_texture_context(&mut self) {
         let depth_texture_context =
-            self.load_depth(Some("Depth texture"), Self::DEPTH_TEXTURE_FORMAT);
+            self.load_depth_texture(Some("Depth texture"), Self::DEPTH_TEXTURE_FORMAT);
         self.depth_texture_context = Some(depth_texture_context);
     }
 
