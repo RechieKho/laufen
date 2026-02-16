@@ -26,7 +26,7 @@ impl winit::application::ApplicationHandler<()> for App {
             if let Some(viewport) = &mut self.viewport {
                 viewport
                     .render(viewport::ViewportRenderParameters {
-                        quad_instances: &[quad::Instance::from(
+                        quad_instances: &[quad::QuadInstance::from(
                             quad::QuadRenderPipelineContext::QUAD_BACKWARD_MATRIX,
                         )],
                     })

@@ -26,7 +26,7 @@ pub struct ViewportCameraProperties {
 }
 
 pub struct ViewportRenderParameters<'a> {
-    pub quad_instances: &'a [quad::Instance],
+    pub quad_instances: &'a [quad::QuadInstance],
 }
 
 impl Default for ViewportCameraProperties {

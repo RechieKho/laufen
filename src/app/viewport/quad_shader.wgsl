@@ -8,6 +8,7 @@ struct InstanceInput {
   @location(6) transformation_matrix_b: vec4<f32>,
   @location(7) transformation_matrix_c: vec4<f32>,
   @location(8) transformation_matrix_d: vec4<f32>,
+  @location(9) atlas_index: u32
 }
 
 struct VertexOutput {
@@ -43,7 +44,19 @@ fn vs_main(
 
   var out: VertexOutput;
   out.position = camera_uniform.transformation_matrix * instance_transformation * vec4<f32>(model.position.xyz, 1.0);
-  out.texture_coordinate = model.texture_coordinate;
+
+  if grid_texture_division_uniform.division != 0 {
+    let texture_coordinate_step = 1.0 / f32(grid_texture_division_uniform.division);
+    let texture_coordinate_step_x = f32(instance.atlas_index % grid_texture_division_uniform.division) * texture_coordinate_step;
+    let texture_coordinate_step_y = f32(instance.atlas_index / grid_texture_division_uniform.division) * texture_coordinate_step;
+    out.texture_coordinate = (model.texture_coordinate / f32(grid_texture_division_uniform.division)) + vec2<f32>(
+      texture_coordinate_step_x,
+      texture_coordinate_step_y
+    );
+  } else {
+    out.texture_coordinate = model.texture_coordinate;
+  }
+
   return out;
 }
 

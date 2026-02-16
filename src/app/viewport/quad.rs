@@ -5,8 +5,38 @@ use crate::adapter::renderer::vertex_buffer::VertexBufferElement;
 use crate::adapter::renderer::*;
 use repr_trait::C;
 
-pub use instance::Instance;
-pub use instance::TransformationMatrix;
+pub type QuadTransformationMatrix = glam::Mat4;
+pub type RawQuadTransformationMatrix = [[f32; 4]; 4];
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable, repr_trait::C)]
+pub struct QuadInstance {
+    pub transformation_matrix: RawQuadTransformationMatrix,
+    pub texture_atlas_index: u32,
+}
+
+const QUAD_INSTANCE_BUFFER_ATTRIBUTES: [vertex_buffer::VertexAttribute; 5] = vertex_buffer::vertex_attr_array![5 => Float32x4, 6 => Float32x4, 7 => Float32x4, 8 => Float32x4, 9 => Uint32];
+
+impl buffer::BufferElement for QuadInstance {}
+
+impl vertex_buffer::VertexBufferElement for QuadInstance {
+    fn get_vertex_buffer_layout() -> vertex_buffer::VertexBufferLayout<'static> {
+        vertex_buffer::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Self>() as wgpu::BufferAddress,
+            step_mode: vertex_buffer::VertexStepMode::Instance,
+            attributes: &QUAD_INSTANCE_BUFFER_ATTRIBUTES,
+        }
+    }
+}
+
+impl From<QuadTransformationMatrix> for QuadInstance {
+    fn from(p_value: QuadTransformationMatrix) -> Self {
+        Self {
+            transformation_matrix: bytemuck::cast(p_value),
+            texture_atlas_index: 0,
+        }
+    }
+}
 
 pub type Position = [f32; 3];
 pub type TextureCoordinate = [f32; 2];
@@ -42,11 +72,11 @@ pub struct QuadRenderPipelineContext {
 impl QuadRenderPipelineContext {
     /// Transformation matrix that transforms the original quad to face upward (+y-axis).
     /// The UV map from -x-axis to +x-axis horizontally, +z-axis to -z-axis vertically.
-    pub const QUAD_UPWARD_MATRIX: TransformationMatrix = TransformationMatrix::IDENTITY;
+    pub const QUAD_UPWARD_MATRIX: QuadTransformationMatrix = QuadTransformationMatrix::IDENTITY;
 
     /// Transformation matrix that transforms the original quad to face downward (-y-axis).
     /// the UV map from +x-axis to -x-axis horizontally, +z-axis to -z-axis vertically.
-    pub const QUAD_DOWNWARD_MATRIX: TransformationMatrix = TransformationMatrix::from_cols(
+    pub const QUAD_DOWNWARD_MATRIX: QuadTransformationMatrix = QuadTransformationMatrix::from_cols(
         glam::Vec4::NEG_X,
         glam::Vec4::NEG_Y,
         glam::Vec4::Z,
@@ -55,7 +85,7 @@ impl QuadRenderPipelineContext {
 
     /// Transformation matrix that transform model to face left (-x-axis).
     /// the UV map from -y-axis to +y-axis horizontally, +z-axis to -z-axis vertically.
-    pub const QUAD_LEFT_MATRIX: TransformationMatrix = TransformationMatrix::from_cols(
+    pub const QUAD_LEFT_MATRIX: QuadTransformationMatrix = QuadTransformationMatrix::from_cols(
         glam::Vec4::Y,
         glam::Vec4::NEG_X,
         glam::Vec4::Z,
@@ -64,7 +94,7 @@ impl QuadRenderPipelineContext {
 
     /// Transformation matrix that transform model to face right (+x-axis).
     /// the UV map from +y-axis to -y-axis horizontally, +z-axis to -z-axis vertically.
-    pub const QUAD_RIGHT_MATRIX: TransformationMatrix = TransformationMatrix::from_cols(
+    pub const QUAD_RIGHT_MATRIX: QuadTransformationMatrix = QuadTransformationMatrix::from_cols(
         glam::Vec4::NEG_Y,
         glam::Vec4::X,
         glam::Vec4::Z,
@@ -73,7 +103,7 @@ impl QuadRenderPipelineContext {
 
     /// Transformation matrix that transform model to face backward (-z-axis).
     /// the UV map from -x-axis to +x-axis horizontally, +y-axis to -y-axis vertically.
-    pub const QUAD_BACKWARD_MATRIX: TransformationMatrix = TransformationMatrix::from_cols(
+    pub const QUAD_BACKWARD_MATRIX: QuadTransformationMatrix = QuadTransformationMatrix::from_cols(
         glam::Vec4::X,
         glam::Vec4::Z,
         glam::Vec4::NEG_Y,
@@ -82,7 +112,7 @@ impl QuadRenderPipelineContext {
 
     /// Transformation matrix that transform model to face forward (+z-axis).
     /// the UV map from -x-axis to +x-axis horizontally, -y-axis to +y-axis vertically.
-    pub const QUAD_FORWARD_MATRIX: TransformationMatrix = TransformationMatrix::from_cols(
+    pub const QUAD_FORWARD_MATRIX: QuadTransformationMatrix = QuadTransformationMatrix::from_cols(
         glam::Vec4::X,
         glam::Vec4::NEG_Z,
         glam::Vec4::Y,
@@ -142,7 +172,7 @@ impl QuadRenderPipelineContext {
                 vertex_entry_point: Some("vs_main"),
                 vertex_buffer_layouts: &[
                     QuadVertex::get_vertex_buffer_layout(),
-                    Instance::get_vertex_buffer_layout(),
+                    QuadInstance::get_vertex_buffer_layout(),
                 ],
                 fragment_entry_point: Some("fs_main"),
                 overriding_color_targets: None,
@@ -162,7 +192,7 @@ impl QuadRenderPipelineContext {
         p_server: &rendering_server::RenderingServer,
         p_render_pass: &mut rendering_server::RenderPass,
         p_camera_context: &camera::CameraContext,
-        p_instances: &[Instance],
+        p_instances: &[QuadInstance],
     ) {
         let mut instance_render_data = render_data::RenderData::default();
         instance_render_data
