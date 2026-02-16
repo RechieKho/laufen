@@ -1,6 +1,7 @@
 use viewport::quad;
 
 pub mod viewport;
+pub mod world;
 
 #[derive(Default)]
 pub struct App {

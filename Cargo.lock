@@ -1074,6 +1074,7 @@ dependencies = [
  "glam",
  "image",
  "log",
+ "num-traits",
  "partially",
  "pollster",
  "renet",
