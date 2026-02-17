@@ -54,7 +54,7 @@ pub struct GridTextureAtlas {
 #[partially(derive(Default))]
 pub struct GridTextureAtlasBuilder<'a> {
     pub cell_size: std::num::NonZeroU32,
-    pub images: Vec<&'a image::DynamicImage>,
+    pub images: &'a [image::DynamicImage],
     pub texture_label: Option<&'a str>,
 }
 
@@ -66,28 +66,20 @@ impl<'a> Default for GridTextureAtlasBuilder<'a> {
     fn default() -> Self {
         Self {
             cell_size: std::num::NonZeroU32::new(24).unwrap(),
-            images: Vec::new(),
+            images: &[],
             texture_label: Some("Grid texture atlas"),
         }
     }
 }
 
 impl<'a> GridTextureAtlasBuilder<'a> {
-    pub fn build_sample(
-        p_parameters: GridTextureAtlasBuilderParameters<'a>,
-    ) -> anyhow::Result<GridTextureAtlas> {
+    pub fn get_sample_images() -> anyhow::Result<Vec<image::DynamicImage>> {
         let image_one_bytes = include_bytes!("sample_grid_cell_texture_one.png");
         let image_two_bytes = include_bytes!("sample_grid_cell_texture_two.png");
-        let image_one = image::load_from_memory(image_one_bytes)?;
-        let image_two = image::load_from_memory(image_two_bytes)?;
-
-        let builder = GridTextureAtlasBuilder {
-            cell_size: std::num::NonZeroU32::new(24).unwrap(),
-            images: vec![&image_one, &image_two],
-            texture_label: Some("Sample grid texture atlas"),
-        };
-
-        builder.build(p_parameters)
+        Ok(vec![
+            image::load_from_memory(image_one_bytes)?,
+            image::load_from_memory(image_two_bytes)?,
+        ])
     }
 
     pub fn build(

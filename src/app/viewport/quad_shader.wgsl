@@ -45,7 +45,8 @@ fn vs_main(
   var out: VertexOutput;
   out.position = camera_uniform.transformation_matrix * instance_transformation * vec4<f32>(model.position.xyz, 1.0);
 
-  if grid_texture_division_uniform.division != 0 {
+  let total_cells = grid_texture_division_uniform.division * grid_texture_division_uniform.division;
+  if total_cells != 0 && instance.atlas_index < total_cells {
     let texture_coordinate_step = 1.0 / f32(grid_texture_division_uniform.division);
     let texture_coordinate_step_x = f32(instance.atlas_index % grid_texture_division_uniform.division) * texture_coordinate_step;
     let texture_coordinate_step_y = f32(instance.atlas_index / grid_texture_division_uniform.division) * texture_coordinate_step;

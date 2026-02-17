@@ -42,7 +42,10 @@ impl Default for ViewportCameraProperties {
 }
 
 impl Viewport {
-    pub fn new(p_event_loop: &winit::event_loop::ActiveEventLoop) -> anyhow::Result<Self> {
+    pub fn new(
+        p_event_loop: &winit::event_loop::ActiveEventLoop,
+        p_texture_atlas_builder: grid_texture_atlas::GridTextureAtlasBuilder,
+    ) -> anyhow::Result<Self> {
         let window_attributes = winit::window::Window::default_attributes();
         let window = std::sync::Arc::new(p_event_loop.create_window(window_attributes).unwrap());
         let window_size = window.inner_size();
@@ -51,15 +54,11 @@ impl Viewport {
             builder.build(rendering_server::RenderingServerBuilderParameters { window }),
         )?;
         let mut camera_context = camera::CameraContext::new(&rendering_server);
-        let quad_render_pipeline_context = quad::QuadRenderPipelineContext::new(
-            &rendering_server,
-            &camera_context,
-            grid_texture_atlas::GridTextureAtlasBuilder::build_sample(
-                GridTextureAtlasBuilderParameters {
-                    server: &rendering_server,
-                },
-            )?,
-        );
+        let texture_atlas = p_texture_atlas_builder.build(GridTextureAtlasBuilderParameters {
+            server: &rendering_server,
+        })?;
+        let quad_render_pipeline_context =
+            quad::QuadRenderPipelineContext::new(&rendering_server, &camera_context, texture_atlas);
         camera_context.properties.aspect_ratio =
             window_size.width as f32 / window_size.height as f32;
 

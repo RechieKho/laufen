@@ -5,14 +5,27 @@ pub mod world;
 
 #[derive(Default)]
 pub struct App {
-    viewport: Option<viewport::Viewport>,
     input: winit_input_helper::WinitInputHelper,
+
+    viewport: Option<viewport::Viewport>,
+    cube_registry: Option<world::cube::CubeRegistry>,
 }
 
 impl winit::application::ApplicationHandler<()> for App {
     fn resumed(&mut self, p_event_loop: &winit::event_loop::ActiveEventLoop) {
+        if self.cube_registry.is_none() {
+            let cube_registry_builder = world::cube::CubeRegistryBuilder::with_builtin().unwrap();
+            self.cube_registry = Some(cube_registry_builder.build());
+        }
+
         if self.viewport.is_none() {
-            self.viewport = Some(viewport::Viewport::new(p_event_loop).unwrap());
+            if let Some(registry) = &self.cube_registry {
+                let mut atlas_builder =
+                    viewport::grid_texture_atlas::GridTextureAtlasBuilder::default();
+                let images = registry.world_texture_images().as_slice();
+                atlas_builder.images = images;
+                self.viewport = Some(viewport::Viewport::new(p_event_loop, atlas_builder).unwrap());
+            }
         }
     }
 
@@ -40,6 +53,20 @@ impl winit::application::ApplicationHandler<()> for App {
                                         glam::Vec3::new(1.0, 0.0, 0.0),
                                     ),
                                 1,
+                            ),
+                            quad::QuadInstance::new(
+                                quad::QuadRenderPipelineContext::QUAD_BACKWARD_MATRIX
+                                    * quad::QuadTransformationMatrix::from_translation(
+                                        glam::Vec3::new(2.0, 0.0, 0.0),
+                                    ),
+                                2,
+                            ),
+                            quad::QuadInstance::new(
+                                quad::QuadRenderPipelineContext::QUAD_BACKWARD_MATRIX
+                                    * quad::QuadTransformationMatrix::from_translation(
+                                        glam::Vec3::new(3.0, 0.0, 0.0),
+                                    ),
+                                10,
                             ),
                         ],
                     })

@@ -13,7 +13,7 @@ impl World {
     const MAX_CHUNK_CHEBYSHEV_DISTANCE: u32 = 7;
 
     fn load<L: chunk::ChunkLoader, S: chunk::ChunkSaver>(&mut self, p_key: chunk::ChunkKey) {
-        self.chunk_map.insert(p_key, L::load_chunk(p_key));
+        self.chunk_map.insert(p_key, L::load_chunk(p_key).unwrap());
 
         let interest_chunk_position: glam::UVec3 = p_key.into();
         self.chunk_map.retain(|p_iter_key, p_iter_chunk| {
@@ -23,7 +23,7 @@ impl World {
             {
                 return true;
             }
-            S::save_chunk(*p_iter_key, p_iter_chunk);
+            let _ = S::save_chunk(*p_iter_key, p_iter_chunk);
             false
         });
     }

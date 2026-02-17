@@ -1,3 +1,5 @@
+use crate::app::world::cube;
+
 use super::morton;
 use super::morton::Morton;
 use super::slot;
@@ -46,11 +48,11 @@ impl Ord for ChunkKey {
 }
 
 pub trait ChunkLoader {
-    fn load_chunk(p_key: ChunkKey) -> Chunk;
+    fn load_chunk(p_key: ChunkKey) -> anyhow::Result<Chunk>;
 }
 
 pub trait ChunkSaver {
-    fn save_chunk(p_key: ChunkKey, p_chunk: &Chunk);
+    fn save_chunk(p_key: ChunkKey, p_chunk: &Chunk) -> anyhow::Result<()>;
 }
 
 pub type ChunkMorton = morton::Morton4;
@@ -92,15 +94,19 @@ pub type ChunkMap = std::collections::BTreeMap<ChunkKey, Chunk>;
 pub struct SampleChunkLoader();
 
 impl ChunkLoader for SampleChunkLoader {
-    fn load_chunk(_p_key: ChunkKey) -> Chunk {
-        Chunk::default()
+    fn load_chunk(_p_key: ChunkKey) -> anyhow::Result<Chunk> {
+        let mut chunk = Chunk::default();
+        *chunk.get_from_position_mut(glam::UVec3::ZERO) = slot::Slot {
+            cube_instance: Some(cube::CubeInstance::try_default()?),
+        };
+        Ok(chunk)
     }
 }
 
 pub struct SampleChunkSaver();
 
 impl ChunkSaver for SampleChunkSaver {
-    fn save_chunk(_p_key: ChunkKey, _p_chunk: &Chunk) {
-        // Ignored...
+    fn save_chunk(_p_key: ChunkKey, _p_chunk: &Chunk) -> anyhow::Result<()> {
+        Ok(())
     }
 }
