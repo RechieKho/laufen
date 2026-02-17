@@ -101,6 +101,22 @@ impl ChunkLoader for SampleChunkLoader {
             cube_instance: Some(cube::CubeInstance::try_default()?),
             ..Default::default()
         };
+        *chunk.get_from_position_mut(glam::UVec3::new(1, 0, 1)) = slot::Slot {
+            cube_instance: Some(cube::CubeInstance::try_default()?),
+            ..Default::default()
+        };
+        *chunk.get_from_position_mut(glam::UVec3::new(1, 0, 0)) = slot::Slot {
+            cube_instance: Some(cube::CubeInstance::try_default()?),
+            ..Default::default()
+        };
+        *chunk.get_from_position_mut(glam::UVec3::new(0, 0, 1)) = slot::Slot {
+            cube_instance: Some(cube::CubeInstance::try_default()?),
+            ..Default::default()
+        };
+        *chunk.get_from_position_mut(glam::UVec3::new(2, 0, 1)) = slot::Slot {
+            cube_instance: Some(cube::CubeInstance::try_default()?),
+            ..Default::default()
+        };
         Ok(chunk)
     }
 }
