@@ -82,6 +82,80 @@ impl<'a> GridTextureAtlasBuilder<'a> {
         ])
     }
 
+    pub fn build_into(
+        self,
+        p_parameters: GridTextureAtlasBuilderParameters<'a>,
+        p_target: &mut GridTextureAtlas,
+    ) -> anyhow::Result<()> {
+        let texture_size = p_target
+            .bounded_texture_context
+            .texture_context()
+            .texture
+            .size();
+
+        if self.images.is_empty() {
+            if texture_size.width != self.cell_size.get()
+                || texture_size.height != self.cell_size.get()
+            {
+                return Err(anyhow::anyhow!("Texture size of target grid teture atlas does not match with the intended size."));
+            }
+
+            let image = image::DynamicImage::new(
+                self.cell_size.get(),
+                self.cell_size.get(),
+                image::ColorType::Rgb8,
+            );
+            return p_target
+                .bounded_texture_context
+                .texture_context()
+                .update_from_image(p_parameters.server, &image);
+        }
+
+        let input_image_count = self.images.len() as u32;
+        let mut image_count_per_axis = input_image_count.isqrt();
+
+        loop {
+            let remainding_image_count =
+                input_image_count as i32 - image_count_per_axis.pow(2) as i32;
+            if remainding_image_count <= 0 {
+                break;
+            }
+            image_count_per_axis += 1;
+        }
+
+        let image_side_length = image_count_per_axis * self.cell_size.get();
+
+        if texture_size.width != image_side_length || texture_size.height != image_side_length {
+            return Err(anyhow::anyhow!(
+                "Texture size of target grid teture atlas does not match with the intended size."
+            ));
+        }
+
+        let mut image =
+            image::DynamicImage::new(image_side_length, image_side_length, image::ColorType::Rgb8);
+
+        for (i, input_image) in self.images.iter().enumerate() {
+            let resized = input_image.resize_exact(
+                self.cell_size.get(),
+                self.cell_size.get(),
+                image::imageops::FilterType::Nearest,
+            );
+            let x = i % (image_count_per_axis as usize);
+            let y = i / (image_count_per_axis as usize);
+            image::imageops::overlay(
+                &mut image,
+                &resized,
+                (x as u32 * self.cell_size.get()) as _,
+                (y as u32 * self.cell_size.get()) as _,
+            );
+        }
+
+        p_target
+            .bounded_texture_context
+            .texture_context()
+            .update_from_image(p_parameters.server, &image)
+    }
+
     pub fn build(
         self,
         p_parameters: GridTextureAtlasBuilderParameters<'a>,
