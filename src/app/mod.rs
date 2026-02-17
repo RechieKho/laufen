@@ -1,5 +1,4 @@
-use viewport::quad;
-
+pub mod engine;
 pub mod viewport;
 pub mod world;
 
@@ -7,25 +6,19 @@ pub mod world;
 pub struct App {
     input: winit_input_helper::WinitInputHelper,
 
-    viewport: Option<viewport::Viewport>,
-    cube_registry: Option<world::cube::CubeRegistry>,
+    engine: Option<engine::Engine>,
 }
 
 impl winit::application::ApplicationHandler<()> for App {
     fn resumed(&mut self, p_event_loop: &winit::event_loop::ActiveEventLoop) {
-        if self.cube_registry.is_none() {
-            let cube_registry_builder = world::cube::CubeRegistryBuilder::with_builtin().unwrap();
-            self.cube_registry = Some(cube_registry_builder.build());
-        }
-
-        if self.viewport.is_none() {
-            if let Some(registry) = &self.cube_registry {
-                let mut atlas_builder =
-                    viewport::grid_texture_atlas::GridTextureAtlasBuilder::default();
-                let images = registry.world_texture_images().as_slice();
-                atlas_builder.images = images;
-                self.viewport = Some(viewport::Viewport::new(p_event_loop, atlas_builder).unwrap());
-            }
+        if self.engine.is_none() {
+            let builder = engine::EngineBuilder::try_default().unwrap();
+            let engine = builder
+                .build(engine::EngineBuilderParameters {
+                    event_loop: p_event_loop,
+                })
+                .unwrap();
+            self.engine = Some(engine);
         }
     }
 
@@ -36,41 +29,8 @@ impl winit::application::ApplicationHandler<()> for App {
         event: winit::event::WindowEvent,
     ) {
         if self.input.process_window_event(&event) {
-            if let Some(viewport) = &mut self.viewport {
-                viewport
-                    .render(viewport::ViewportRenderParameters {
-                        quad_instances: &[
-                            quad::QuadInstance::new(
-                                quad::QuadRenderPipelineContext::QUAD_BACKWARD_MATRIX
-                                    * quad::QuadTransformationMatrix::from_translation(
-                                        glam::Vec3::new(-1.0, 0.0, 0.0),
-                                    ),
-                                0,
-                            ),
-                            quad::QuadInstance::new(
-                                quad::QuadRenderPipelineContext::QUAD_BACKWARD_MATRIX
-                                    * quad::QuadTransformationMatrix::from_translation(
-                                        glam::Vec3::new(1.0, 0.0, 0.0),
-                                    ),
-                                1,
-                            ),
-                            quad::QuadInstance::new(
-                                quad::QuadRenderPipelineContext::QUAD_BACKWARD_MATRIX
-                                    * quad::QuadTransformationMatrix::from_translation(
-                                        glam::Vec3::new(2.0, 0.0, 0.0),
-                                    ),
-                                2,
-                            ),
-                            quad::QuadInstance::new(
-                                quad::QuadRenderPipelineContext::QUAD_BACKWARD_MATRIX
-                                    * quad::QuadTransformationMatrix::from_translation(
-                                        glam::Vec3::new(3.0, 0.0, 0.0),
-                                    ),
-                                10,
-                            ),
-                        ],
-                    })
-                    .unwrap();
+            if let Some(engine) = &mut self.engine {
+                engine.render().unwrap();
             }
         }
     }
@@ -86,47 +46,8 @@ impl winit::application::ApplicationHandler<()> for App {
     }
 
     fn about_to_wait(&mut self, p_event_loop: &winit::event_loop::ActiveEventLoop) {
-        if self.input.close_requested() {
-            p_event_loop.exit();
-            return;
-        }
-
-        if let Some((width, height)) = self.input.resolution() {
-            if let Some(viewport) = &mut self.viewport {
-                viewport.resize(width, height);
-            }
-        }
-
-        if let Some(viewport) = &mut self.viewport {
-            let camera_properties = viewport.camera_properties();
-            const LINEAR_SPEED: f32 = 0.01;
-            const ANGULAR_SPEED: f32 = std::f32::consts::PI / 100.0;
-
-            if self.input.key_held(winit::keyboard::KeyCode::KeyW) {
-                viewport.set_camera_properties(viewport::PartialViewportCameraProperties {
-                    origin: Some(
-                        camera_properties.origin + camera_properties.direction * LINEAR_SPEED,
-                    ),
-                    ..Default::default()
-                });
-            } else if self.input.key_held(winit::keyboard::KeyCode::KeyS) {
-                viewport.set_camera_properties(viewport::PartialViewportCameraProperties {
-                    origin: Some(
-                        camera_properties.origin - camera_properties.direction * LINEAR_SPEED,
-                    ),
-                    ..Default::default()
-                });
-            } else if self.input.key_held(winit::keyboard::KeyCode::KeyA) {
-                viewport.set_camera_properties(viewport::PartialViewportCameraProperties {
-                    direction: Some(camera_properties.direction.rotate_y(ANGULAR_SPEED)),
-                    ..Default::default()
-                });
-            } else if self.input.key_held(winit::keyboard::KeyCode::KeyD) {
-                viewport.set_camera_properties(viewport::PartialViewportCameraProperties {
-                    direction: Some(camera_properties.direction.rotate_y(-ANGULAR_SPEED)),
-                    ..Default::default()
-                });
-            }
+        if let Some(engine) = &mut self.engine {
+            engine.process(&self.input, p_event_loop);
         }
     }
 
