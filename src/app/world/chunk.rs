@@ -48,11 +48,11 @@ impl Ord for ChunkKey {
 }
 
 pub trait ChunkLoader {
-    fn load_chunk(p_key: ChunkKey) -> anyhow::Result<Chunk>;
+    fn load_chunk(&mut self, p_key: ChunkKey) -> anyhow::Result<Chunk>;
 }
 
 pub trait ChunkSaver {
-    fn save_chunk(p_key: ChunkKey, p_chunk: &Chunk) -> anyhow::Result<()>;
+    fn save_chunk(&mut self, p_key: ChunkKey, p_chunk: &Chunk) -> anyhow::Result<()>;
 }
 
 pub type ChunkMorton = morton::Morton4;
@@ -91,22 +91,25 @@ impl Chunk {
 
 pub type ChunkMap = std::collections::BTreeMap<ChunkKey, Chunk>;
 
+#[derive(Default)]
 pub struct SampleChunkLoader();
 
 impl ChunkLoader for SampleChunkLoader {
-    fn load_chunk(_p_key: ChunkKey) -> anyhow::Result<Chunk> {
+    fn load_chunk(&mut self, _p_key: ChunkKey) -> anyhow::Result<Chunk> {
         let mut chunk = Chunk::default();
         *chunk.get_from_position_mut(glam::UVec3::ZERO) = slot::Slot {
             cube_instance: Some(cube::CubeInstance::try_default()?),
+            ..Default::default()
         };
         Ok(chunk)
     }
 }
 
+#[derive(Default)]
 pub struct SampleChunkSaver();
 
 impl ChunkSaver for SampleChunkSaver {
-    fn save_chunk(_p_key: ChunkKey, _p_chunk: &Chunk) -> anyhow::Result<()> {
+    fn save_chunk(&mut self, _p_key: ChunkKey, _p_chunk: &Chunk) -> anyhow::Result<()> {
         Ok(())
     }
 }

@@ -9,6 +9,9 @@ pub struct Engine {
 
     #[getset(get = "pub")]
     cube_registry: world::cube::CubeRegistry,
+
+    #[getset(get = "pub")]
+    world: world::World,
 }
 
 #[derive(partially::Partial)]
@@ -41,15 +44,18 @@ impl EngineBuilder {
 
         let viewport = viewport::Viewport::new(p_parameters.event_loop, atlas_builder)?;
 
+        let world = world::World::with_sample_loader_saver();
+
         Ok(Engine {
             viewport,
+            world,
             cube_registry,
         })
     }
 }
 
 impl Engine {
-    pub fn render(&mut self) -> anyhow::Result<(), wgpu::SurfaceError> {
+    pub fn render_sample_quads(&mut self) -> anyhow::Result<(), wgpu::SurfaceError> {
         // Just render some quads for now.
         self.viewport.render(viewport::ViewportRenderParameters {
             quad_instances: &[
@@ -85,6 +91,103 @@ impl Engine {
         })
     }
 
+    pub fn render(&mut self) -> anyhow::Result<(), wgpu::SurfaceError> {
+        let mut quad_instances = Vec::<quad::QuadInstance>::default();
+
+        self.world.foreach_intersected(
+            &world::uaabb::UAabb {
+                min: glam::UVec3::new(0, 0, 0),
+                max: glam::UVec3::new(20, 20, 20),
+            },
+            |p_point, p_slot| {
+                if p_slot.cube_instance.is_none() {
+                    return;
+                }
+
+                let cube_instance = p_slot.cube_instance.unwrap();
+                let cube_id = cube_instance.id;
+                let cube = self.cube_registry.cubes().get(&cube_id);
+                if cube.is_none() {
+                    return;
+                }
+                let cube = cube.unwrap();
+                let cube_transformation = glam::Mat4::from(cube_instance.orientation);
+
+                let back_quad = quad::QuadInstance::new(
+                    cube_transformation
+                        * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
+                            0.0 + p_point.x as f32,
+                            0.0 + p_point.y as f32,
+                            0.5 + p_point.z as f32,
+                        ))
+                        * quad::QuadRenderPipelineContext::QUAD_BACKWARD_MATRIX,
+                    cube.world_texture_atlas_index_back,
+                );
+                let front_quad = quad::QuadInstance::new(
+                    cube_transformation
+                        * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
+                            0.0 + p_point.x as f32,
+                            0.0 + p_point.y as f32,
+                            -0.5 + p_point.z as f32,
+                        ))
+                        * quad::QuadRenderPipelineContext::QUAD_FORWARD_MATRIX,
+                    cube.world_texture_atlas_index_front,
+                );
+                let up_quad = quad::QuadInstance::new(
+                    cube_transformation
+                        * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
+                            0.0 + p_point.x as f32,
+                            0.5 + p_point.y as f32,
+                            0.0 + p_point.z as f32,
+                        ))
+                        * quad::QuadRenderPipelineContext::QUAD_UPWARD_MATRIX,
+                    cube.world_texture_atlas_index_top,
+                );
+                let down_quad = quad::QuadInstance::new(
+                    cube_transformation
+                        * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
+                            0.0 + p_point.x as f32,
+                            -0.5 + p_point.y as f32,
+                            0.0 + p_point.z as f32,
+                        ))
+                        * quad::QuadRenderPipelineContext::QUAD_DOWNWARD_MATRIX,
+                    cube.world_texture_atlas_index_bottom,
+                );
+                let left_quad = quad::QuadInstance::new(
+                    cube_transformation
+                        * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
+                            -0.5 + p_point.x as f32,
+                            0.0 + p_point.y as f32,
+                            0.0 + p_point.z as f32,
+                        ))
+                        * quad::QuadRenderPipelineContext::QUAD_LEFT_MATRIX,
+                    cube.world_texture_atlas_index_left,
+                );
+                let right_quad = quad::QuadInstance::new(
+                    cube_transformation
+                        * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
+                            0.5 + p_point.x as f32,
+                            0.0 + p_point.y as f32,
+                            0.0 + p_point.z as f32,
+                        ))
+                        * quad::QuadRenderPipelineContext::QUAD_RIGHT_MATRIX,
+                    cube.world_texture_atlas_index_right,
+                );
+
+                quad_instances.push(back_quad);
+                quad_instances.push(front_quad);
+                quad_instances.push(left_quad);
+                quad_instances.push(right_quad);
+                quad_instances.push(up_quad);
+                quad_instances.push(down_quad);
+            },
+        );
+
+        self.viewport.render(viewport::ViewportRenderParameters {
+            quad_instances: quad_instances.as_slice(),
+        })
+    }
+
     pub fn process(
         &mut self,
         p_input: &winit_input_helper::WinitInputHelper,
@@ -100,7 +203,7 @@ impl Engine {
         }
 
         let camera_properties = self.viewport.camera_properties();
-        const LINEAR_SPEED: f32 = 0.01;
+        const LINEAR_SPEED: f32 = 0.05;
         const ANGULAR_SPEED: f32 = std::f32::consts::PI / 100.0;
 
         if p_input.key_held(winit::keyboard::KeyCode::KeyW) {

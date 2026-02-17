@@ -40,7 +40,7 @@ impl uniform_buffer::UniformBufferElement for CameraUniform {}
 impl Default for CameraProperties {
     fn default() -> Self {
         Self {
-            origin: glam::Vec3::new(0.0, 0.0, 5.0),
+            origin: glam::Vec3::new(0.0, 1.0, 5.0),
             direction: glam::Vec3::NEG_Z,
             up: glam::Vec3::Y,
             aspect_ratio: 16.0 / 9.0,

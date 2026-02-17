@@ -80,11 +80,9 @@ pub struct QuadRenderPipelineContext {
 
 impl QuadRenderPipelineContext {
     /// Transformation matrix that transforms the original quad to face upward (+y-axis).
-    /// The UV map from -x-axis to +x-axis horizontally, +z-axis to -z-axis vertically.
     pub const QUAD_UPWARD_MATRIX: QuadTransformationMatrix = QuadTransformationMatrix::IDENTITY;
 
     /// Transformation matrix that transforms the original quad to face downward (-y-axis).
-    /// the UV map from +x-axis to -x-axis horizontally, +z-axis to -z-axis vertically.
     pub const QUAD_DOWNWARD_MATRIX: QuadTransformationMatrix = QuadTransformationMatrix::from_cols(
         glam::Vec4::NEG_X,
         glam::Vec4::NEG_Y,
@@ -93,25 +91,22 @@ impl QuadRenderPipelineContext {
     );
 
     /// Transformation matrix that transform model to face left (-x-axis).
-    /// the UV map from -y-axis to +y-axis horizontally, +z-axis to -z-axis vertically.
     pub const QUAD_LEFT_MATRIX: QuadTransformationMatrix = QuadTransformationMatrix::from_cols(
-        glam::Vec4::Y,
-        glam::Vec4::NEG_X,
         glam::Vec4::Z,
+        glam::Vec4::NEG_X,
+        glam::Vec4::NEG_Y,
         glam::Vec4::W,
     );
 
     /// Transformation matrix that transform model to face right (+x-axis).
-    /// the UV map from +y-axis to -y-axis horizontally, +z-axis to -z-axis vertically.
     pub const QUAD_RIGHT_MATRIX: QuadTransformationMatrix = QuadTransformationMatrix::from_cols(
-        glam::Vec4::NEG_Y,
+        glam::Vec4::NEG_Z,
         glam::Vec4::X,
-        glam::Vec4::Z,
+        glam::Vec4::NEG_Y,
         glam::Vec4::W,
     );
 
     /// Transformation matrix that transform model to face backward (-z-axis).
-    /// the UV map from -x-axis to +x-axis horizontally, +y-axis to -y-axis vertically.
     pub const QUAD_BACKWARD_MATRIX: QuadTransformationMatrix = QuadTransformationMatrix::from_cols(
         glam::Vec4::X,
         glam::Vec4::Z,
@@ -120,11 +115,10 @@ impl QuadRenderPipelineContext {
     );
 
     /// Transformation matrix that transform model to face forward (+z-axis).
-    /// the UV map from -x-axis to +x-axis horizontally, -y-axis to +y-axis vertically.
     pub const QUAD_FORWARD_MATRIX: QuadTransformationMatrix = QuadTransformationMatrix::from_cols(
-        glam::Vec4::X,
+        glam::Vec4::NEG_X,
         glam::Vec4::NEG_Z,
-        glam::Vec4::Y,
+        glam::Vec4::NEG_Y,
         glam::Vec4::W,
     );
 

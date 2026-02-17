@@ -4,16 +4,28 @@ pub mod chunk;
 pub mod cube;
 pub mod morton;
 pub mod slot;
+pub mod uaabb;
 
 pub struct World {
     chunk_map: chunk::ChunkMap,
+    loader: Box<dyn chunk::ChunkLoader>,
+    saver: Box<dyn chunk::ChunkSaver>,
 }
 
 impl World {
     const MAX_CHUNK_CHEBYSHEV_DISTANCE: u32 = 7;
 
-    fn load<L: chunk::ChunkLoader, S: chunk::ChunkSaver>(&mut self, p_key: chunk::ChunkKey) {
-        self.chunk_map.insert(p_key, L::load_chunk(p_key).unwrap());
+    pub fn with_sample_loader_saver() -> Self {
+        Self {
+            chunk_map: chunk::ChunkMap::default(),
+            loader: Box::new(chunk::SampleChunkLoader::default()),
+            saver: Box::new(chunk::SampleChunkSaver::default()),
+        }
+    }
+
+    fn load(&mut self, p_key: chunk::ChunkKey) {
+        self.chunk_map
+            .insert(p_key, self.loader.load_chunk(p_key).unwrap());
 
         let interest_chunk_position: glam::UVec3 = p_key.into();
         self.chunk_map.retain(|p_iter_key, p_iter_chunk| {
@@ -23,34 +35,40 @@ impl World {
             {
                 return true;
             }
-            let _ = S::save_chunk(*p_iter_key, p_iter_chunk);
+            let _ = self.saver.save_chunk(*p_iter_key, p_iter_chunk);
             false
         });
     }
 
-    pub fn get_block<L: chunk::ChunkLoader, S: chunk::ChunkSaver>(
-        &mut self,
-        p_position: glam::UVec3,
-    ) -> &slot::Slot {
+    pub fn get_slot(&mut self, p_position: glam::UVec3) -> &slot::Slot {
         let (code, remained) = chunk::ChunkMorton::consume(p_position);
         let key = chunk::ChunkKey::from(remained);
         if !self.chunk_map.contains_key(&key) {
-            self.load::<L, S>(key);
+            self.load(key);
         }
         let chunk = self.chunk_map.get(&key).unwrap();
         chunk.get(code)
     }
 
-    pub fn get_block_mut<L: chunk::ChunkLoader, S: chunk::ChunkSaver>(
+    pub fn get_slot_mut<L: chunk::ChunkLoader, S: chunk::ChunkSaver>(
         &mut self,
         p_position: glam::UVec3,
     ) -> &mut slot::Slot {
         let (code, remained) = chunk::ChunkMorton::consume(p_position);
         let key = chunk::ChunkKey::from(remained);
         if !self.chunk_map.contains_key(&key) {
-            self.load::<L, S>(key);
+            self.load(key);
         }
         let chunk = self.chunk_map.get_mut(&key).unwrap();
         chunk.get_mut(code)
+    }
+
+    pub fn foreach_intersected<F>(&mut self, p_uaabb: &uaabb::UAabb, mut p_callback: F)
+    where
+        F: FnMut(glam::UVec3, &slot::Slot),
+    {
+        p_uaabb.foreach_points(|p_point| {
+            p_callback(p_point, self.get_slot(p_point));
+        });
     }
 }

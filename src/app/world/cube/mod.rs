@@ -34,6 +34,7 @@ type CubeMap = std::collections::BTreeMap<CubeResourceId, Cube>;
 
 #[derive(Default, getset::Getters)]
 pub struct CubeRegistry {
+    #[getset(get = "pub")]
     cubes: CubeMap,
 
     #[getset(get = "pub")]
@@ -121,7 +122,7 @@ impl CubeRegistryBuilder {
     }
 }
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, Debug)]
 pub enum CubeInstanceOrientation {
     #[default]
     FORWARD,
@@ -169,7 +170,7 @@ impl From<CubeInstanceOrientation> for glam::Mat4 {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct CubeInstance {
     pub id: CubeResourceId,
     pub orientation: CubeInstanceOrientation,

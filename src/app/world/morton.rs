@@ -25,14 +25,14 @@ pub trait Morton {
             let current_x_bit = x & 1;
             x ^= current_x_bit;
             x >>= 1;
-            let current_y_bit = x & 1;
+            let current_y_bit = y & 1;
             y ^= current_y_bit;
             y >>= 1;
-            let current_z_bit = x & 1;
+            let current_z_bit = z & 1;
             z ^= current_z_bit;
             z >>= 1;
 
-            result = (result << 3) | (x | y << 1 | z << 2)
+            result = (result << 3) | (current_x_bit | current_y_bit << 1 | current_z_bit << 2);
         }
 
         (result, glam::UVec3::new(x_remained, y_remained, z_remained))
