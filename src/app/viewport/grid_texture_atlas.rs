@@ -73,6 +73,23 @@ impl<'a> Default for GridTextureAtlasBuilder<'a> {
 }
 
 impl<'a> GridTextureAtlasBuilder<'a> {
+    pub fn build_sample(
+        p_parameters: GridTextureAtlasBuilderParameters<'a>,
+    ) -> anyhow::Result<GridTextureAtlas> {
+        let image_one_bytes = include_bytes!("sample_grid_cell_texture_one.png");
+        let image_two_bytes = include_bytes!("sample_grid_cell_texture_two.png");
+        let image_one = image::load_from_memory(image_one_bytes)?;
+        let image_two = image::load_from_memory(image_two_bytes)?;
+
+        let builder = GridTextureAtlasBuilder {
+            cell_size: std::num::NonZeroU32::new(24).unwrap(),
+            images: vec![&image_one, &image_two],
+            texture_label: Some("Sample grid texture atlas"),
+        };
+
+        builder.build(p_parameters)
+    }
+
     pub fn build(
         self,
         p_parameters: GridTextureAtlasBuilderParameters<'a>,
@@ -101,7 +118,8 @@ impl<'a> GridTextureAtlasBuilder<'a> {
         let mut image_count_per_axis = input_image_count.isqrt();
 
         loop {
-            let remainding_image_count = (input_image_count - image_count_per_axis.pow(2)) as i32;
+            let remainding_image_count =
+                input_image_count as i32 - image_count_per_axis.pow(2) as i32;
             if remainding_image_count <= 0 {
                 break;
             }
@@ -122,7 +140,12 @@ impl<'a> GridTextureAtlasBuilder<'a> {
             );
             let x = i % (image_count_per_axis as usize);
             let y = i / (image_count_per_axis as usize);
-            image::imageops::overlay(&mut image, &resized, x as _, y as _);
+            image::imageops::overlay(
+                &mut image,
+                &resized,
+                (x as u32 * self.cell_size.get()) as _,
+                (y as u32 * self.cell_size.get()) as _,
+            );
         }
 
         let texture_context = p_parameters
@@ -134,7 +157,9 @@ impl<'a> GridTextureAtlasBuilder<'a> {
             bounded_texture_context,
             division_context: GridTextureDivisionContext::new(
                 p_parameters.server,
-                GridTextureDivisionUniform { division: 0 },
+                GridTextureDivisionUniform {
+                    division: image_count_per_axis,
+                },
             ),
         })
     }

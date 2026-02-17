@@ -51,13 +51,14 @@ impl Viewport {
             builder.build(rendering_server::RenderingServerBuilderParameters { window }),
         )?;
         let mut camera_context = camera::CameraContext::new(&rendering_server);
-        let texture_atlas_builder = grid_texture_atlas::GridTextureAtlasBuilder::default();
         let quad_render_pipeline_context = quad::QuadRenderPipelineContext::new(
             &rendering_server,
             &camera_context,
-            texture_atlas_builder.build(GridTextureAtlasBuilderParameters {
-                server: &rendering_server,
-            })?,
+            grid_texture_atlas::GridTextureAtlasBuilder::build_sample(
+                GridTextureAtlasBuilderParameters {
+                    server: &rendering_server,
+                },
+            )?,
         );
         camera_context.properties.aspect_ratio =
             window_size.width as f32 / window_size.height as f32;

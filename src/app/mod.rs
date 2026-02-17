@@ -26,9 +26,22 @@ impl winit::application::ApplicationHandler<()> for App {
             if let Some(viewport) = &mut self.viewport {
                 viewport
                     .render(viewport::ViewportRenderParameters {
-                        quad_instances: &[quad::QuadInstance::from(
-                            quad::QuadRenderPipelineContext::QUAD_BACKWARD_MATRIX,
-                        )],
+                        quad_instances: &[
+                            quad::QuadInstance::new(
+                                quad::QuadRenderPipelineContext::QUAD_BACKWARD_MATRIX
+                                    * quad::QuadTransformationMatrix::from_translation(
+                                        glam::Vec3::new(-1.0, 0.0, 0.0),
+                                    ),
+                                0,
+                            ),
+                            quad::QuadInstance::new(
+                                quad::QuadRenderPipelineContext::QUAD_BACKWARD_MATRIX
+                                    * quad::QuadTransformationMatrix::from_translation(
+                                        glam::Vec3::new(1.0, 0.0, 0.0),
+                                    ),
+                                1,
+                            ),
+                        ],
                     })
                     .unwrap();
             }

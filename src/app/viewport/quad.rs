@@ -11,7 +11,7 @@ pub type RawQuadTransformationMatrix = [[f32; 4]; 4];
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable, repr_trait::C)]
 pub struct QuadInstance {
-    pub transformation_matrix: RawQuadTransformationMatrix,
+    pub raw_transformation_matrix: RawQuadTransformationMatrix,
     pub texture_atlas_index: u32,
 }
 
@@ -31,9 +31,18 @@ impl vertex_buffer::VertexBufferElement for QuadInstance {
 
 impl From<QuadTransformationMatrix> for QuadInstance {
     fn from(p_value: QuadTransformationMatrix) -> Self {
+        Self::new(p_value, 0)
+    }
+}
+
+impl QuadInstance {
+    pub fn new(
+        p_transformation_matrix: QuadTransformationMatrix,
+        p_texture_atlas_index: u32,
+    ) -> Self {
         Self {
-            transformation_matrix: bytemuck::cast(p_value),
-            texture_atlas_index: 0,
+            texture_atlas_index: p_texture_atlas_index,
+            raw_transformation_matrix: bytemuck::cast(p_transformation_matrix),
         }
     }
 }
@@ -125,7 +134,7 @@ impl QuadRenderPipelineContext {
     const QUAD_VERTICES: [QuadVertex; 4] = [
         QuadVertex {
             position: [-0.5, 0.0, 0.5],
-            texture_coordinate: [1.0, 0.0],
+            texture_coordinate: [0.0, 1.0],
         },
         QuadVertex {
             position: [0.5, 0.0, 0.5],
