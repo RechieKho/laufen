@@ -302,6 +302,41 @@ impl RenderingServer {
         self.load_texture_from_image(&image, p_label)
     }
 
+    pub fn update_texture_from_image(
+        &self,
+        p_texture_context: &texture::TextureContext,
+        p_image: &image::DynamicImage,
+    ) -> anyhow::Result<()> {
+        let texture_size = p_texture_context.texture.size();
+        let image_size = p_image.dimensions();
+
+        if texture_size.width != image_size.0 || texture_size.height != image_size.1 {
+            return Err(anyhow::anyhow!(
+                "The texture dimension and image dimension does not match."
+            ));
+        }
+
+        let rgba = p_image.to_rgba8();
+
+        self.queue.write_texture(
+            TexelCopyTextureInfo {
+                aspect: TextureAspect::All,
+                texture: &p_texture_context.texture,
+                mip_level: 0,
+                origin: Origin3d::ZERO,
+            },
+            &rgba,
+            TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(4 * image_size.0),
+                rows_per_image: Some(image_size.1),
+            },
+            texture_size,
+        );
+
+        Ok(())
+    }
+
     pub fn load_texture_from_image(
         &self,
         p_image: &image::DynamicImage,

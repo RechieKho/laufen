@@ -65,6 +65,16 @@ impl bind_group::ToBindGroupContext for TextureContext {
     }
 }
 
+impl TextureContext {
+    pub fn update_from_image(
+        &self,
+        p_server: rendering_server::RenderingServer,
+        p_image: &image::DynamicImage,
+    ) -> anyhow::Result<()> {
+        p_server.update_texture_from_image(self, p_image)
+    }
+}
+
 #[derive(getset::Getters, getset::MutGetters)]
 pub struct BoundedTextureContext {
     #[getset(get = "pub", get_mut = "pub")]
