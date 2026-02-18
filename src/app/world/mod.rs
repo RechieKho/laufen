@@ -13,7 +13,11 @@ pub struct World {
 }
 
 impl World {
-    const MAX_CHUNK_CHEBYSHEV_DISTANCE: u32 = 7;
+    // TODO: Make auto unloading more efficient.
+    // It is currently having issue that causes frequent unloading that slows everything down.
+    // The frequent unload is caused by the diameter of the "HOT" area (area that is frequently fetched)
+    // is too large, making it unload the other side when fetching the edge of the another side.
+    const MAX_ACTIVE_CHUNK_DISTANCE: u32 = 50;
 
     pub fn with_sample_loader_saver() -> Self {
         Self {
@@ -30,9 +34,8 @@ impl World {
         let interest_chunk_position: glam::IVec3 = p_key.into();
         self.chunk_map.retain(|p_iter_key, p_iter_chunk| {
             let current_chunk_position: glam::IVec3 = (*p_iter_key).into();
-            if interest_chunk_position.chebyshev_distance(current_chunk_position)
-                < Self::MAX_CHUNK_CHEBYSHEV_DISTANCE
-            {
+            let distance = interest_chunk_position.chebyshev_distance(current_chunk_position);
+            if distance < Self::MAX_ACTIVE_CHUNK_DISTANCE {
                 return true;
             }
             let _ = self.saver.save_chunk(*p_iter_key, p_iter_chunk);
