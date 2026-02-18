@@ -62,13 +62,4 @@ impl World {
         let chunk = self.chunk_map.get_mut(&key).unwrap();
         chunk.get_mut(code)
     }
-
-    pub fn foreach_intersected<F>(&mut self, p_uaabb: &uaabb::UAabb, mut p_callback: F)
-    where
-        F: FnMut(glam::UVec3, &slot::Slot),
-    {
-        p_uaabb.foreach_points(|p_point| {
-            p_callback(p_point, self.get_slot(p_point));
-        });
-    }
 }

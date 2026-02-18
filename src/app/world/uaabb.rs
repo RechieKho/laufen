@@ -25,16 +25,14 @@ impl UAabb {
         self.min.cmple(p_other).all() && self.max.cmpge(p_other).all()
     }
 
-    pub fn foreach_points<F>(&self, mut p_callback: F)
-    where
-        F: FnMut(glam::UVec3),
-    {
-        for x in self.min.x..self.max.x {
-            for y in self.min.y..self.max.y {
-                for z in self.min.z..self.max.z {
-                    p_callback(glam::UVec3::new(x, y, z))
-                }
-            }
-        }
+    pub fn iter_points(&self) -> Box<dyn Iterator<Item = glam::UVec3>> {
+        Box::new(
+            itertools::iproduct!(
+                self.min.x..self.max.x,
+                self.min.y..self.max.y,
+                self.min.z..self.max.z
+            )
+            .map(|(x, y, z)| glam::UVec3::new(x, y, z)),
+        )
     }
 }
