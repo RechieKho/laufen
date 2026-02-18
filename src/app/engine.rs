@@ -91,15 +91,13 @@ impl Engine {
         })
     }
 
-    pub fn render(&mut self) -> anyhow::Result<(), wgpu::SurfaceError> {
+    pub fn render_world(
+        &mut self,
+        p_aabb: &world::iaabb::IAabb,
+    ) -> anyhow::Result<(), wgpu::SurfaceError> {
         let mut quad_instances = Vec::<quad::QuadInstance>::default();
 
-        let aabb = &world::uaabb::UAabb {
-            min: glam::UVec3::new(0, 0, 0),
-            max: glam::UVec3::new(20, 20, 20),
-        };
-
-        for point in aabb.iter_points() {
+        for point in p_aabb.iter_points() {
             let slot = self.world.get_slot(point);
 
             if slot.cube_instance.is_none() {
@@ -187,6 +185,15 @@ impl Engine {
         self.viewport.render(viewport::ViewportRenderParameters {
             quad_instances: quad_instances.as_slice(),
         })
+    }
+
+    pub fn render(&mut self) -> anyhow::Result<(), wgpu::SurfaceError> {
+        let aabb = &world::iaabb::IAabb {
+            min: glam::IVec3::new(0, 0, 0),
+            max: glam::IVec3::new(10, 10, 10),
+        };
+
+        self.render_world(aabb)
     }
 
     pub fn process(

@@ -2,9 +2,9 @@ use morton::Morton;
 
 pub mod chunk;
 pub mod cube;
+pub mod iaabb;
 pub mod morton;
 pub mod slot;
-pub mod uaabb;
 
 pub struct World {
     chunk_map: chunk::ChunkMap,
@@ -27,9 +27,9 @@ impl World {
         self.chunk_map
             .insert(p_key, self.loader.load_chunk(p_key).unwrap());
 
-        let interest_chunk_position: glam::UVec3 = p_key.into();
+        let interest_chunk_position: glam::IVec3 = p_key.into();
         self.chunk_map.retain(|p_iter_key, p_iter_chunk| {
-            let current_chunk_position: glam::UVec3 = (*p_iter_key).into();
+            let current_chunk_position: glam::IVec3 = (*p_iter_key).into();
             if interest_chunk_position.chebyshev_distance(current_chunk_position)
                 < Self::MAX_CHUNK_CHEBYSHEV_DISTANCE
             {
@@ -40,7 +40,7 @@ impl World {
         });
     }
 
-    pub fn get_slot(&mut self, p_position: glam::UVec3) -> &slot::Slot {
+    pub fn get_slot(&mut self, p_position: glam::IVec3) -> &slot::Slot {
         let (code, remained) = chunk::ChunkMorton::consume(p_position);
         let key = chunk::ChunkKey::from(remained);
         if !self.chunk_map.contains_key(&key) {
@@ -52,7 +52,7 @@ impl World {
 
     pub fn get_slot_mut<L: chunk::ChunkLoader, S: chunk::ChunkSaver>(
         &mut self,
-        p_position: glam::UVec3,
+        p_position: glam::IVec3,
     ) -> &mut slot::Slot {
         let (code, remained) = chunk::ChunkMorton::consume(p_position);
         let key = chunk::ChunkKey::from(remained);
