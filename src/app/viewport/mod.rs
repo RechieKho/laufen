@@ -26,13 +26,9 @@ pub struct ViewportCameraProperties {
     pub z_far: f32,
 }
 
-pub struct ViewportRenderParameters<'a, S, I>
-where
-    S: Into<std::borrow::Cow<'a, text::TextSection<'a>>>,
-    I: IntoIterator<Item = S>,
-{
+pub struct ViewportRenderParameters<'a> {
     pub quad_instances: &'a [quad::QuadInstance],
-    pub text_sections: Option<I>,
+    pub text_sections: &'a [text::TextSection<'a>],
 }
 
 impl Default for ViewportCameraProperties {
@@ -112,19 +108,10 @@ impl Viewport {
             .unwrap_or(self.camera_context.properties.z_far);
     }
 
-    pub fn render<'a, S, I>(
-        &mut self,
-        p_parameters: ViewportRenderParameters<'a, S, I>,
-    ) -> anyhow::Result<()>
-    where
-        S: Into<std::borrow::Cow<'a, text::TextSection<'a>>>,
-        I: IntoIterator<Item = S>,
-    {
-        if let Some(sections) = p_parameters.text_sections {
-            self.text_brush_context
-                .queue(&self.rendering_server, sections)
-                .map_err(anyhow::Error::msg)?;
-        }
+    pub fn render<'a>(&mut self, p_parameters: ViewportRenderParameters<'a>) -> anyhow::Result<()> {
+        self.text_brush_context
+            .queue(&self.rendering_server, p_parameters.text_sections)
+            .map_err(anyhow::Error::msg)?;
 
         self.camera_context
             .submit(self.rendering_server.queue_mut());

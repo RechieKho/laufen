@@ -155,7 +155,7 @@ impl Engine {
 
         self.viewport.render(viewport::ViewportRenderParameters {
             quad_instances: quad_instances.as_slice(),
-            text_sections: Some([section]),
+            text_sections: &[section],
         })
     }
 
