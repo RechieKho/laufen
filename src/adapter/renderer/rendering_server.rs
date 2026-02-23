@@ -1,3 +1,4 @@
+use super::text;
 use super::texture;
 use image::GenericImageView;
 use std::num::NonZero;
@@ -16,18 +17,30 @@ pub trait SubmitToQueue {
     fn submit(&self, p_queue: &Queue);
 }
 
+pub struct DepthStencilContext {
+    pub depth_texture_context: texture::TextureContext,
+    pub depth_stencil_state: DepthStencilState,
+}
+
 /// Central server for rendering.
 #[derive(getset::Getters, getset::MutGetters)]
 pub struct RenderingServer {
+    #[getset(get = "pub")]
     surface: Surface<'static>,
+
+    #[getset(get = "pub")]
     surface_configuration: SurfaceConfiguration,
-    device: Device,
-    window: Arc<winit::window::Window>,
 
     #[getset(get = "pub", get_mut = "pub")]
     queue: Queue,
 
-    depth_texture_context: Option<texture::TextureContext>,
+    #[getset(get = "pub", get_mut = "pub")]
+    device: Device,
+
+    #[getset(get = "pub", get_mut = "pub")]
+    window: Arc<winit::window::Window>,
+
+    depth_stencil_context: Option<DepthStencilContext>,
 }
 
 /// Builder for rendering server with overridable default options.
@@ -115,16 +128,17 @@ impl<'a> RenderingServerBuilder<'a> {
         surface.configure(&device, &surface_configuration);
 
         let mut server = RenderingServer {
+            queue,
+
             surface,
             surface_configuration,
             device,
-            queue,
             window: p_parameter.window,
 
-            depth_texture_context: None,
+            depth_stencil_context: None,
         };
 
-        server.update_depth_texture_context();
+        server.update_depth_stencil_context();
 
         Ok(server)
     }
@@ -142,11 +156,6 @@ pub struct RenderPipelineOptions<'a> {
     pub fragment_default_color_target_blend: Option<BlendState>,
     pub fragment_default_color_target_write_mask: ColorWrites,
     pub primitive: PrimitiveState,
-    pub depth_stencil_default_depth_format: TextureFormat,
-    pub depth_stencil_default_depth_write_enabled: bool,
-    pub depth_stencil_default_depth_compare: CompareFunction,
-    pub depth_stencil_default_stencil: StencilState,
-    pub depth_stencil_default_bias: DepthBiasState,
     pub multisample: MultisampleState,
     pub multiview_mask: Option<NonZero<u32>>,
     pub cache: Option<&'a PipelineCache>,
@@ -171,11 +180,6 @@ impl<'a> Default for RenderPipelineOptions<'a> {
                 unclipped_depth: false,
                 conservative: false,
             },
-            depth_stencil_default_depth_format: RenderingServer::DEPTH_TEXTURE_FORMAT,
-            depth_stencil_default_depth_write_enabled: true,
-            depth_stencil_default_depth_compare: CompareFunction::Less,
-            depth_stencil_default_stencil: StencilState::default(),
-            depth_stencil_default_bias: DepthBiasState::default(),
             multisample: MultisampleState {
                 count: 1,
                 mask: !0,
@@ -254,13 +258,13 @@ impl<'a> TypicalRenderPassBuilder<'a> {
                 ops: self.color_attachment_operations,
                 depth_slice: self.color_attachment_depth_slice,
             })],
-            depth_stencil_attachment: p_server.depth_texture_context.as_ref().map(
-                |texture_context| RenderPassDepthStencilAttachment {
-                    view: &texture_context.view,
+            depth_stencil_attachment: p_server.depth_stencil_context.as_ref().map(|context| {
+                RenderPassDepthStencilAttachment {
+                    view: &context.depth_texture_context.view,
                     depth_ops: self.depth_operations,
                     stencil_ops: self.stencil_operations,
-                },
-            ),
+                }
+            }),
             occlusion_query_set: self.occlusion_query_set,
             timestamp_writes: self.timestamp_writes.clone(),
             multiview_mask: self.multiview_mask,
@@ -280,12 +284,52 @@ impl RenderingServer {
         self.surface_configuration.height = p_height;
         self.surface
             .configure(&self.device, &self.surface_configuration);
-        self.update_depth_texture_context();
+        self.update_depth_stencil_context();
     }
 
     pub fn resize_to_window(&mut self) {
         let size = self.window.inner_size();
         self.resize(size.width, size.height);
+    }
+
+    pub fn load_default_text_brush(&self) -> anyhow::Result<text::TextBrushContext> {
+        let pack = text::font_pack::FontPack::try_load_default()?;
+        self.load_text_brush(pack)
+    }
+
+    pub fn load_text_brush<T: text::font_pack::Font>(
+        &self,
+        p_font_pack: text::font_pack::FontPack<T>,
+    ) -> anyhow::Result<text::TextBrushContext<T>> {
+        let mut builder =
+            wgpu_text::BrushBuilder::using_font(p_font_pack.normal).initial_cache_size((512, 512));
+
+        if let Some(context) = self.depth_stencil_context.as_ref() {
+            builder = builder.with_depth_stencil(Some(context.depth_stencil_state.clone()));
+        }
+
+        let normal = text::FontId::default();
+
+        let italic = p_font_pack.italic.map(|p_font| builder.add_font(p_font));
+        let bold = p_font_pack.bold.map(|p_font| builder.add_font(p_font));
+        let bold_italic = p_font_pack
+            .bold_italic
+            .map(|p_font| builder.add_font(p_font));
+
+        let brush = builder.build(
+            &self.device,
+            self.surface_configuration.width,
+            self.surface_configuration.height,
+            self.surface_configuration.format,
+        );
+
+        Ok(text::TextBrushContext {
+            brush,
+            normal,
+            italic,
+            bold,
+            bold_italic,
+        })
     }
 
     pub fn load_sample_texture(&self) -> anyhow::Result<texture::TextureContext> {
@@ -439,10 +483,20 @@ impl RenderingServer {
         }
     }
 
-    fn update_depth_texture_context(&mut self) {
+    fn update_depth_stencil_context(&mut self) {
         let depth_texture_context =
             self.load_depth_texture(Some("Depth texture"), Self::DEPTH_TEXTURE_FORMAT);
-        self.depth_texture_context = Some(depth_texture_context);
+        let depth_stencil_state = DepthStencilState {
+            format: RenderingServer::DEPTH_TEXTURE_FORMAT,
+            depth_write_enabled: true,
+            depth_compare: CompareFunction::Less,
+            stencil: StencilState::default(),
+            bias: DepthBiasState::default(),
+        };
+        self.depth_stencil_context = Some(DepthStencilContext {
+            depth_texture_context,
+            depth_stencil_state,
+        });
     }
 
     pub fn create_bind_group_layout(
@@ -504,13 +558,10 @@ impl RenderingServer {
                     compilation_options: PipelineCompilationOptions::default(),
                 }),
                 primitive: p_options.primitive,
-                depth_stencil: Some(DepthStencilState {
-                    format: p_options.depth_stencil_default_depth_format,
-                    depth_write_enabled: p_options.depth_stencil_default_depth_write_enabled,
-                    depth_compare: p_options.depth_stencil_default_depth_compare,
-                    stencil: p_options.depth_stencil_default_stencil.clone(),
-                    bias: p_options.depth_stencil_default_bias,
-                }),
+                depth_stencil: self
+                    .depth_stencil_context
+                    .as_ref()
+                    .map(|context| context.depth_stencil_state.clone()),
                 multisample: p_options.multisample,
                 multiview_mask: p_options.multiview_mask,
                 cache: p_options.cache,

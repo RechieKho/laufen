@@ -6,6 +6,7 @@ pub mod index_buffer;
 pub mod instance;
 pub mod render_data;
 pub mod rendering_server;
+pub mod text;
 pub mod texture;
 pub mod uniform_buffer;
 pub mod vertex_buffer;
@@ -16,6 +17,7 @@ pub struct SampleRenderingContext {
     pub shader_module: rendering_server::ShaderModule,
     pub render_pipeline: rendering_server::RenderPipeline,
     pub instances: Vec<instance::Instance>,
+    pub text_brush_context: text::TextBrushContext,
 }
 
 impl SampleRenderingContext {
@@ -80,6 +82,7 @@ impl SampleRenderingContext {
             },
             &rendering_server::RenderPipelineOptions::default(),
         );
+        let text_brush_context = p_server.load_default_text_brush()?;
 
         Ok(SampleRenderingContext {
             data,
@@ -87,17 +90,26 @@ impl SampleRenderingContext {
             bounded_texture_context,
             render_pipeline,
             instances,
+            text_brush_context,
         })
     }
 
     pub fn render(
-        &self,
+        &mut self,
         p_server: &mut rendering_server::RenderingServer,
     ) -> anyhow::Result<(), rendering_server::SurfaceError> {
+        let text = text::Text::new("Hello World")
+            .with_scale(24.0)
+            .with_color([1.0, 1.0, 1.0, 1.0]);
+        let section = text::TextSection::default().add_text(text);
+        self.text_brush_context.queue(p_server, [section]).unwrap();
+
         let render_pass_builder = rendering_server::TypicalRenderPassBuilder::default();
         p_server.render_with_typical_pass(
             &mut |_p_server: &rendering_server::RenderingServer,
                   p_render_pass: &mut rendering_server::RenderPass| {
+                self.text_brush_context.submit(p_render_pass);
+
                 p_render_pass.set_pipeline(&self.render_pipeline);
                 [self.bounded_texture_context.bind_group_context()].submit(p_render_pass);
                 self.data.submit(p_render_pass);
@@ -145,6 +157,13 @@ impl winit::application::ApplicationHandler<()> for SampleRenderingApp {
             winit::event::WindowEvent::Resized(size) => {
                 if let Some(server) = &mut self.rendering_server {
                     server.resize(size.width, size.height);
+                    if let Some(context) = &mut self.rendering_context {
+                        context.text_brush_context.resize(
+                            size.width as _,
+                            size.height as _,
+                            server.queue(),
+                        );
+                    }
                 }
             }
             winit::event::WindowEvent::RedrawRequested => {

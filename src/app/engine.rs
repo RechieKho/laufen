@@ -1,3 +1,5 @@
+use crate::adapter::renderer::*;
+
 use super::viewport;
 use super::viewport::quad;
 use super::world;
@@ -12,6 +14,8 @@ pub struct Engine {
 
     #[getset(get = "pub")]
     world: world::World,
+
+    last_process_timestamp: std::time::Instant,
 }
 
 #[derive(partially::Partial)]
@@ -47,6 +51,7 @@ impl EngineBuilder {
         let world = world::World::with_sample_loader_saver();
 
         Ok(Engine {
+            last_process_timestamp: std::time::Instant::now(),
             viewport,
             world,
             cube_registry,
@@ -55,46 +60,7 @@ impl EngineBuilder {
 }
 
 impl Engine {
-    pub fn render_sample_quads(&mut self) -> anyhow::Result<(), wgpu::SurfaceError> {
-        // Just render some quads for now.
-        self.viewport.render(viewport::ViewportRenderParameters {
-            quad_instances: &[
-                quad::QuadInstance::new(
-                    quad::QuadRenderPipelineContext::QUAD_BACKWARD_MATRIX
-                        * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
-                            -1.0, 0.0, 0.0,
-                        )),
-                    0,
-                ),
-                quad::QuadInstance::new(
-                    quad::QuadRenderPipelineContext::QUAD_BACKWARD_MATRIX
-                        * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
-                            1.0, 0.0, 0.0,
-                        )),
-                    1,
-                ),
-                quad::QuadInstance::new(
-                    quad::QuadRenderPipelineContext::QUAD_BACKWARD_MATRIX
-                        * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
-                            2.0, 0.0, 0.0,
-                        )),
-                    2,
-                ),
-                quad::QuadInstance::new(
-                    quad::QuadRenderPipelineContext::QUAD_BACKWARD_MATRIX
-                        * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
-                            3.0, 0.0, 0.0,
-                        )),
-                    10,
-                ),
-            ],
-        })
-    }
-
-    pub fn render_world(
-        &mut self,
-        p_aabb: &world::iaabb::IAabb,
-    ) -> anyhow::Result<(), wgpu::SurfaceError> {
+    pub fn render_world(&mut self, p_aabb: &world::iaabb::IAabb) -> anyhow::Result<()> {
         let mut quad_instances = Vec::<quad::QuadInstance>::default();
 
         for point in p_aabb.iter_points() {
@@ -182,12 +148,18 @@ impl Engine {
             quad_instances.push(down_quad);
         }
 
+        let text = text::Text::new("Hello World")
+            .with_scale(24.0)
+            .with_color([1.0, 1.0, 1.0, 1.0]);
+        let section = text::TextSection::default().add_text(text);
+
         self.viewport.render(viewport::ViewportRenderParameters {
             quad_instances: quad_instances.as_slice(),
+            text_sections: Some([section]),
         })
     }
 
-    pub fn render(&mut self) -> anyhow::Result<(), wgpu::SurfaceError> {
+    pub fn render(&mut self) -> anyhow::Result<()> {
         let aabb = &world::iaabb::IAabb {
             min: glam::IVec3::new(-20, -10, -20),
             max: glam::IVec3::new(20, 10, 20),
@@ -201,6 +173,9 @@ impl Engine {
         p_input: &winit_input_helper::WinitInputHelper,
         p_event_loop: &winit::event_loop::ActiveEventLoop,
     ) {
+        let current_process_timestamp = std::time::Instant::now();
+        let _delta = current_process_timestamp.duration_since(self.last_process_timestamp);
+
         if p_input.close_requested() {
             p_event_loop.exit();
             return;
@@ -243,5 +218,7 @@ impl Engine {
                     ..Default::default()
                 });
         }
+
+        self.last_process_timestamp = current_process_timestamp;
     }
 }

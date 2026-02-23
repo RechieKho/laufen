@@ -1,4 +1,4 @@
-use crate::adapter::renderer::rendering_server::SubmitToQueue;
+use crate::adapter::renderer::rendering_server::{SubmitToQueue, SubmitToRenderPass};
 use crate::adapter::renderer::*;
 use crate::app::viewport::grid_texture_atlas::GridTextureAtlasBuilderParameters;
 
@@ -10,6 +10,7 @@ pub mod quad;
 pub struct Viewport {
     quad_render_pipeline_context: quad::QuadRenderPipelineContext,
     camera_context: camera::CameraContext,
+    text_brush_context: text::TextBrushContext,
 
     #[getset(get = "pub", get_mut = "pub")]
     rendering_server: rendering_server::RenderingServer,
@@ -25,8 +26,13 @@ pub struct ViewportCameraProperties {
     pub z_far: f32,
 }
 
-pub struct ViewportRenderParameters<'a> {
+pub struct ViewportRenderParameters<'a, S, I>
+where
+    S: Into<std::borrow::Cow<'a, text::TextSection<'a>>>,
+    I: IntoIterator<Item = S>,
+{
     pub quad_instances: &'a [quad::QuadInstance],
+    pub text_sections: Option<I>,
 }
 
 impl Default for ViewportCameraProperties {
@@ -61,17 +67,21 @@ impl Viewport {
             quad::QuadRenderPipelineContext::new(&rendering_server, &camera_context, texture_atlas);
         camera_context.properties.aspect_ratio =
             window_size.width as f32 / window_size.height as f32;
+        let text_brush_context = rendering_server.load_default_text_brush()?;
 
         Ok(Self {
             rendering_server,
             camera_context,
             quad_render_pipeline_context,
+            text_brush_context,
         })
     }
 
     pub fn resize(&mut self, p_width: u32, p_height: u32) {
         self.rendering_server.resize(p_width, p_height);
         self.camera_context.properties.aspect_ratio = p_width as f32 / p_height as f32;
+        self.text_brush_context
+            .resize(p_width as _, p_height as _, self.rendering_server.queue());
     }
 
     pub fn camera_properties(&self) -> ViewportCameraProperties {
@@ -102,24 +112,38 @@ impl Viewport {
             .unwrap_or(self.camera_context.properties.z_far);
     }
 
-    pub fn render<'a>(
+    pub fn render<'a, S, I>(
         &mut self,
-        p_parameters: ViewportRenderParameters<'a>,
-    ) -> anyhow::Result<(), rendering_server::SurfaceError> {
+        p_parameters: ViewportRenderParameters<'a, S, I>,
+    ) -> anyhow::Result<()>
+    where
+        S: Into<std::borrow::Cow<'a, text::TextSection<'a>>>,
+        I: IntoIterator<Item = S>,
+    {
+        if let Some(sections) = p_parameters.text_sections {
+            self.text_brush_context
+                .queue(&self.rendering_server, sections)
+                .map_err(anyhow::Error::msg)?;
+        }
+
         self.camera_context
             .submit(self.rendering_server.queue_mut());
         let render_pass_builder = rendering_server::TypicalRenderPassBuilder::default();
-        self.rendering_server.render_with_typical_pass(
-            &mut |p_server: &rendering_server::RenderingServer,
-                  p_render_pass: &mut rendering_server::RenderPass| {
-                self.quad_render_pipeline_context.draw(
-                    p_server,
-                    p_render_pass,
-                    &self.camera_context,
-                    p_parameters.quad_instances,
-                );
-            },
-            &render_pass_builder,
-        )
+        self.rendering_server
+            .render_with_typical_pass(
+                &mut |p_server: &rendering_server::RenderingServer,
+                      p_render_pass: &mut rendering_server::RenderPass| {
+                    self.text_brush_context.submit(p_render_pass);
+
+                    self.quad_render_pipeline_context.draw(
+                        p_server,
+                        p_render_pass,
+                        &self.camera_context,
+                        p_parameters.quad_instances,
+                    );
+                },
+                &render_pass_builder,
+            )
+            .map_err(anyhow::Error::msg)
     }
 }
