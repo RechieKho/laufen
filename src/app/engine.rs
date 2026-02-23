@@ -16,6 +16,7 @@ pub struct Engine {
     world: world::World,
 
     last_process_timestamp: std::time::Instant,
+    frame_per_second: u32,
 }
 
 #[derive(partially::Partial)]
@@ -51,10 +52,11 @@ impl EngineBuilder {
         let world = world::World::with_sample_loader_saver();
 
         Ok(Engine {
-            last_process_timestamp: std::time::Instant::now(),
             viewport,
             world,
             cube_registry,
+            last_process_timestamp: std::time::Instant::now(),
+            frame_per_second: 0,
         })
     }
 }
@@ -148,7 +150,8 @@ impl Engine {
             quad_instances.push(down_quad);
         }
 
-        let text = text::Text::new("Hello World")
+        let frame_per_second_text = format!("FPS: {}", self.frame_per_second);
+        let text = text::Text::new(frame_per_second_text.as_str())
             .with_scale(24.0)
             .with_color([1.0, 1.0, 1.0, 1.0]);
         let section = text::TextSection::default().add_text(text);
@@ -174,7 +177,8 @@ impl Engine {
         p_event_loop: &winit::event_loop::ActiveEventLoop,
     ) {
         let current_process_timestamp = std::time::Instant::now();
-        let _delta = current_process_timestamp.duration_since(self.last_process_timestamp);
+        let delta = current_process_timestamp.duration_since(self.last_process_timestamp);
+        self.frame_per_second = (1.0 / delta.as_secs_f32()) as _;
 
         if p_input.close_requested() {
             p_event_loop.exit();
