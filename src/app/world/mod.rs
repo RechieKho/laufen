@@ -13,12 +13,6 @@ pub struct World {
 }
 
 impl World {
-    // TODO: Make auto unloading more efficient.
-    // It is currently having issue that causes frequent unloading that slows everything down.
-    // The frequent unload is caused by the diameter of the "HOT" area (area that is frequently fetched)
-    // is too large, making it unload the other side when fetching the edge of the another side.
-    const MAX_ACTIVE_CHUNK_DISTANCE: u32 = 50;
-
     pub fn with_sample_loader_saver() -> Self {
         Self {
             chunk_map: chunk::ChunkMap::default(),
@@ -30,12 +24,13 @@ impl World {
     fn load(&mut self, p_key: chunk::ChunkKey) {
         self.chunk_map
             .insert(p_key, self.loader.load_chunk(p_key).unwrap());
+    }
 
-        let interest_chunk_position: glam::IVec3 = p_key.into();
+    pub fn purge_beyond(&mut self, p_center: glam::IVec3, p_max_chebyshev_distance: u32) {
         self.chunk_map.retain(|p_iter_key, p_iter_chunk| {
             let current_chunk_position: glam::IVec3 = (*p_iter_key).into();
-            let distance = interest_chunk_position.chebyshev_distance(current_chunk_position);
-            if distance < Self::MAX_ACTIVE_CHUNK_DISTANCE {
+            let distance = p_center.chebyshev_distance(current_chunk_position);
+            if distance < p_max_chebyshev_distance {
                 return true;
             }
             let _ = self.saver.save_chunk(*p_iter_key, p_iter_chunk);

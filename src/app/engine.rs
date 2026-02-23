@@ -189,8 +189,8 @@ impl Engine {
 
     pub fn render(&mut self) -> anyhow::Result<(), wgpu::SurfaceError> {
         let aabb = &world::iaabb::IAabb {
-            min: glam::IVec3::new(-10, -10, -10),
-            max: glam::IVec3::new(10, 10, 10),
+            min: glam::IVec3::new(-20, -10, -20),
+            max: glam::IVec3::new(20, 10, 20),
         };
 
         self.render_world(aabb)
