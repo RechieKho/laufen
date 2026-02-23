@@ -243,32 +243,35 @@ impl<'a> Default for TypicalRenderPassBuilder<'a> {
     }
 }
 
+pub struct TypicalRenderPassBuilderParameters<'a> {
+    pub server: &'a RenderingServer,
+    pub encoder: &'a mut CommandEncoder,
+    pub view: &'a TextureView,
+}
+
 impl<'a> TypicalRenderPassBuilder<'a> {
-    pub fn build(
-        &'a self,
-        p_server: &'a RenderingServer,
-        p_encoder: &'a mut CommandEncoder,
-        p_view: &'a TextureView,
-    ) -> RenderPass<'a> {
-        p_encoder.begin_render_pass(&RenderPassDescriptor {
-            label: self.label,
-            color_attachments: &[Some(RenderPassColorAttachment {
-                view: p_view,
-                resolve_target: self.color_attachment_resolve_target,
-                ops: self.color_attachment_operations,
-                depth_slice: self.color_attachment_depth_slice,
-            })],
-            depth_stencil_attachment: p_server.depth_stencil_context.as_ref().map(|context| {
-                RenderPassDepthStencilAttachment {
-                    view: &context.depth_texture_context.view,
-                    depth_ops: self.depth_operations,
-                    stencil_ops: self.stencil_operations,
-                }
-            }),
-            occlusion_query_set: self.occlusion_query_set,
-            timestamp_writes: self.timestamp_writes.clone(),
-            multiview_mask: self.multiview_mask,
-        })
+    pub fn build(&'a self, p_parameters: TypicalRenderPassBuilderParameters<'a>) -> RenderPass<'a> {
+        p_parameters
+            .encoder
+            .begin_render_pass(&RenderPassDescriptor {
+                label: self.label,
+                color_attachments: &[Some(RenderPassColorAttachment {
+                    view: p_parameters.view,
+                    resolve_target: self.color_attachment_resolve_target,
+                    ops: self.color_attachment_operations,
+                    depth_slice: self.color_attachment_depth_slice,
+                })],
+                depth_stencil_attachment: p_parameters.server.depth_stencil_context.as_ref().map(
+                    |context| RenderPassDepthStencilAttachment {
+                        view: &context.depth_texture_context.view,
+                        depth_ops: self.depth_operations,
+                        stencil_ops: self.stencil_operations,
+                    },
+                ),
+                occlusion_query_set: self.occlusion_query_set,
+                timestamp_writes: self.timestamp_writes.clone(),
+                multiview_mask: self.multiview_mask,
+            })
     }
 }
 
@@ -604,7 +607,11 @@ impl RenderingServer {
         self.render(&mut |p_server: &mut RenderingServer,
                           p_encoder: &mut CommandEncoder,
                           p_view: &TextureView| {
-            let mut render_pass = p_pass_builder.build(p_server, p_encoder, p_view);
+            let mut render_pass = p_pass_builder.build(TypicalRenderPassBuilderParameters {
+                server: p_server,
+                encoder: p_encoder,
+                view: p_view,
+            });
             p_render(p_server, &mut render_pass);
         })
     }
