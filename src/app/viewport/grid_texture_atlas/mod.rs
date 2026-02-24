@@ -90,7 +90,7 @@ impl<'a> GridTextureAtlasBuilder<'a> {
         let texture_size = p_target
             .bounded_texture_context
             .texture_context()
-            .texture
+            .texture()
             .size();
 
         if self.images.is_empty() {

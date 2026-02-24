@@ -29,3 +29,6 @@ itertools = "0.14.0"
 wgpu_text = "28.0.1"
 gfx_glyph = "0.17.1"
 
+[profile.dev]
+opt-level = 2
+

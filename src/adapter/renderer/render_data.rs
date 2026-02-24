@@ -5,11 +5,12 @@ use super::index_buffer;
 use super::rendering_server;
 use super::vertex_buffer;
 
-#[derive(Default)]
+#[derive(Default, getset::Getters)]
 pub struct RenderData {
-    pub vertex_buffers: Vec<vertex_buffer::VertexBuffer>,
-    pub index_buffer: Option<index_buffer::IndexBuffer>,
     pub vertex_buffer_slot_offset: u32,
+
+    vertex_buffers: Vec<vertex_buffer::VertexBuffer>,
+    index_buffer: Option<index_buffer::IndexBuffer>,
 }
 
 impl rendering_server::SubmitToRenderPass for RenderData {

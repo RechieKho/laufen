@@ -2,9 +2,12 @@ use super::renderer::{rendering_server::SubmitToRenderPass, vertex_buffer::Verte
 
 pub mod bind_group;
 pub mod buffer;
+pub mod depth_stencil_context;
 pub mod index_buffer;
 pub mod instance;
 pub mod render_data;
+pub mod render_pass_context;
+pub mod render_pipeline_context;
 pub mod rendering_server;
 pub mod text;
 pub mod texture;
@@ -14,10 +17,10 @@ pub mod vertex_buffer;
 pub struct SampleRenderingContext {
     pub data: render_data::RenderData,
     pub bounded_texture_context: texture::BoundedTextureContext,
-    pub shader_module: rendering_server::ShaderModule,
-    pub render_pipeline: rendering_server::RenderPipeline,
+    pub render_pipeline_context: render_pipeline_context::RenderPipelineContext,
     pub instances: Vec<instance::Instance>,
     pub text_brush_context: text::TextBrushContext,
+    pub depth_stencil_context: depth_stencil_context::DepthStencilContext,
 }
 
 impl SampleRenderingContext {
@@ -66,13 +69,25 @@ impl SampleRenderingContext {
         let bounded_texture_context =
             texture::BoundedTextureContext::new(p_server, texture_context);
 
-        let shader_module = p_server.create_sample_shader_module();
-        let render_pipeline = p_server.create_pipeline(
-            &rendering_server::RenderPipelineParameters {
-                shader_module: &shader_module,
-                bind_group_layout: &[&bounded_texture_context
+        let depth_stencil_context = depth_stencil_context::DepthStencilContextBuilder::default()
+            .build(
+                depth_stencil_context::DepthStencilContextBuilderParameters { server: p_server },
+            );
+
+        let render_pipeline_context_builder = render_pipeline_context::RenderPipelineBuilder {
+            depth_stencil_state: Some(depth_stencil_context.depth_stencil_state().clone()),
+            ..Default::default()
+        };
+
+        let render_pipeline_context =
+            render_pipeline_context_builder
+                .build(render_pipeline_context::RenderPipelineBuilderParameters {
+                server: p_server,
+                shader_module_descriptor:
+                    render_pipeline_context::RenderPipelineBuilder::SAMPLE_SHADER_MODULE_DESCRIPTOR,
+                bind_group_layout: &[bounded_texture_context
                     .bind_group_context()
-                    .bind_group_layout],
+                    .bind_group_layout()],
                 vertex_entry_point: Some("vs_main"),
                 vertex_buffer_layouts: &[
                     vertex_buffer::SimpleVertex::get_vertex_buffer_layout(),
@@ -80,18 +95,20 @@ impl SampleRenderingContext {
                 ],
                 fragment_entry_point: Some("fs_main"),
                 overriding_color_targets: None,
-            },
-            &rendering_server::RenderPipelineOptions::default(),
-        );
-        let text_brush_context = p_server.load_default_text_brush()?;
+            });
+
+        let text_brush_context_builder = text::TextBrushContextBuilder {
+            depth_stencil_state: Some(depth_stencil_context.depth_stencil_state().clone()),
+        };
+        let text_brush_context = text_brush_context_builder.build_with_default_font(p_server)?;
 
         Ok(SampleRenderingContext {
             data,
-            shader_module,
             bounded_texture_context,
-            render_pipeline,
+            render_pipeline_context,
             instances,
             text_brush_context,
+            depth_stencil_context,
         })
     }
 
@@ -105,23 +122,57 @@ impl SampleRenderingContext {
         let section = text::TextSection::default().add_text(text);
         self.text_brush_context.queue(p_server, [section]).unwrap();
 
-        let render_pass_builder = rendering_server::TypicalRenderPassBuilder::default();
-        p_server.render_with_typical_pass(
-            &mut |_p_server: &rendering_server::RenderingServer,
-                  p_render_pass: &mut rendering_server::RenderPass| {
-                self.text_brush_context.submit(p_render_pass);
+        p_server.render(&mut |p_server, p_encoder, p_color_texture_view| {
+            {
+                let render_pass_builder = render_pass_context::RenderPassContextBuilder {
+                    ..Default::default()
+                };
+                let mut pass = render_pass_builder.build(
+                    render_pass_context::RenderPassContextBuilderParameters {
+                        server: p_server,
+                        encoder: p_encoder,
+                        color_texture_view: p_color_texture_view,
+                        depth_texture_view: self
+                            .depth_stencil_context
+                            .depth_texture_context()
+                            .view(),
+                    },
+                );
 
-                p_render_pass.set_pipeline(&self.render_pipeline);
-                [self.bounded_texture_context.bind_group_context()].submit(p_render_pass);
-                self.data.submit(p_render_pass);
-                p_render_pass.draw_indexed(
+                pass.render_pass
+                    .set_pipeline(self.render_pipeline_context.pipeline());
+                [self.bounded_texture_context.bind_group_context()].submit(&mut pass.render_pass);
+                self.data.submit(&mut pass.render_pass);
+                pass.render_pass.draw_indexed(
                     0..Self::TRIANGLE_INDICES.len() as _,
                     0,
                     0..self.instances.len() as _,
                 );
-            },
-            &render_pass_builder,
-        )
+            }
+
+            {
+                let render_pass_builder = render_pass_context::RenderPassContextBuilder {
+                    color_attachment_operations: rendering_server::Operations {
+                        load: rendering_server::LoadOp::Load,
+                        store: rendering_server::StoreOp::Store,
+                    },
+                    ..Default::default()
+                };
+                let mut pass = render_pass_builder.build(
+                    render_pass_context::RenderPassContextBuilderParameters {
+                        server: p_server,
+                        encoder: p_encoder,
+                        color_texture_view: p_color_texture_view,
+                        depth_texture_view: self
+                            .depth_stencil_context
+                            .depth_texture_context()
+                            .view(),
+                    },
+                );
+
+                self.text_brush_context.submit(&mut pass.render_pass);
+            }
+        })
     }
 }
 
@@ -159,6 +210,14 @@ impl winit::application::ApplicationHandler<()> for SampleRenderingApp {
                 if let Some(server) = &mut self.rendering_server {
                     server.resize(size.width, size.height);
                     if let Some(context) = &mut self.rendering_context {
+                        context.text_brush_context.resize(
+                            size.width as _,
+                            size.height as _,
+                            server.queue(),
+                        );
+                        context
+                            .depth_stencil_context
+                            .rebuild_depth_texture_context(server);
                         context.text_brush_context.resize(
                             size.width as _,
                             size.height as _,

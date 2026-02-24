@@ -11,8 +11,8 @@ pub type RawQuadTransformationMatrix = [[f32; 4]; 4];
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable, repr_trait::C)]
 pub struct QuadInstance {
-    pub raw_transformation_matrix: RawQuadTransformationMatrix,
-    pub texture_atlas_index: u32,
+    raw_transformation_matrix: RawQuadTransformationMatrix,
+    texture_atlas_index: u32,
 }
 
 const QUAD_INSTANCE_BUFFER_ATTRIBUTES: [vertex_buffer::VertexAttribute; 5] = vertex_buffer::vertex_attr_array![5 => Float32x4, 6 => Float32x4, 7 => Float32x4, 8 => Float32x4, 9 => Uint32];
@@ -73,7 +73,7 @@ impl vertex_buffer::VertexBufferElement for QuadVertex {
 
 /// A render pipeline context for rendering quads.
 pub struct QuadRenderPipelineContext {
-    render_pipeline: rendering_server::RenderPipeline,
+    render_pipeline_context: render_pipeline_context::RenderPipelineContext,
     render_data: render_data::RenderData,
     texture_atlas: grid_texture_atlas::GridTextureAtlas,
 }
@@ -149,6 +149,7 @@ impl QuadRenderPipelineContext {
         p_server: &rendering_server::RenderingServer,
         p_camera_context: &camera::CameraContext,
         p_texture_atlas: grid_texture_atlas::GridTextureAtlas,
+        p_depth_stencil_state: &depth_stencil_context::DepthStencilContext,
     ) -> Self {
         let mut render_data = render_data::RenderData::default();
         render_data.add_vertex_collections(
@@ -156,21 +157,24 @@ impl QuadRenderPipelineContext {
             &[vertex_buffer::ToVertexBuffer(&Self::QUAD_VERTICES)],
         );
         render_data.set_indices(p_server, Some(&Self::QUAD_INDICES));
-        let shader_module =
-            p_server.create_shader_module(rendering_server::include_wgsl!("quad_shader.wgsl"));
-        let render_pipeline = p_server.create_pipeline(
-            &rendering_server::RenderPipelineParameters {
-                shader_module: &shader_module,
+        let render_pipeline_context_builder = render_pipeline_context::RenderPipelineBuilder {
+            depth_stencil_state: Some(p_depth_stencil_state.depth_stencil_state().clone()),
+            ..Default::default()
+        };
+        let render_pipeline_context = render_pipeline_context_builder.build(
+            render_pipeline_context::RenderPipelineBuilderParameters {
+                server: p_server,
+                shader_module_descriptor: rendering_server::include_wgsl!("quad_shader.wgsl"),
                 bind_group_layout: &[
-                    &p_camera_context.bind_group_context().bind_group_layout,
-                    &p_texture_atlas
+                    p_camera_context.bind_group_context().bind_group_layout(),
+                    p_texture_atlas
                         .division_context
                         .bind_group_context()
-                        .bind_group_layout,
-                    &p_texture_atlas
+                        .bind_group_layout(),
+                    p_texture_atlas
                         .bounded_texture_context
                         .bind_group_context()
-                        .bind_group_layout,
+                        .bind_group_layout(),
                 ],
                 vertex_entry_point: Some("vs_main"),
                 vertex_buffer_layouts: &[
@@ -180,12 +184,11 @@ impl QuadRenderPipelineContext {
                 fragment_entry_point: Some("fs_main"),
                 overriding_color_targets: None,
             },
-            &rendering_server::RenderPipelineOptions::default(),
         );
 
         Self {
             render_data,
-            render_pipeline,
+            render_pipeline_context,
             texture_atlas: p_texture_atlas,
         }
     }
@@ -202,7 +205,7 @@ impl QuadRenderPipelineContext {
             .add_vertex_collections(p_server, &[vertex_buffer::ToVertexBuffer(p_instances)]);
         instance_render_data.vertex_buffer_slot_offset = 1;
 
-        p_render_pass.set_pipeline(&self.render_pipeline);
+        p_render_pass.set_pipeline(self.render_pipeline_context.pipeline());
         self.render_data.submit(p_render_pass);
         instance_render_data.submit(p_render_pass);
         [

@@ -8,6 +8,69 @@ pub use wgpu_text::TextBrush;
 
 pub mod font_pack;
 
+#[derive(partially::Partial, Default)]
+#[partially(derive(Default))]
+pub struct TextBrushContextBuilder {
+    pub depth_stencil_state: Option<rendering_server::DepthStencilState>,
+}
+
+pub struct TextBrushContextBuilderParameters<'a, T: font_pack::Font> {
+    pub server: &'a rendering_server::RenderingServer,
+    pub font_pack: font_pack::FontPack<T>,
+}
+
+impl TextBrushContextBuilder {
+    pub fn build_with_default_font(
+        self,
+        p_server: &rendering_server::RenderingServer,
+    ) -> anyhow::Result<TextBrushContext<font_pack::FontArc>> {
+        let font_pack = font_pack::FontPack::try_load_default()?;
+        self.build(TextBrushContextBuilderParameters {
+            server: p_server,
+            font_pack,
+        })
+    }
+
+    pub fn build<'a, T: font_pack::Font>(
+        self,
+        p_parameters: TextBrushContextBuilderParameters<'a, T>,
+    ) -> anyhow::Result<TextBrushContext<T>> {
+        let mut builder = wgpu_text::BrushBuilder::using_font(p_parameters.font_pack.normal)
+            .with_depth_stencil(self.depth_stencil_state)
+            .initial_cache_size((512, 512));
+
+        let normal = FontId::default();
+
+        let italic = p_parameters
+            .font_pack
+            .italic
+            .map(|p_font| builder.add_font(p_font));
+        let bold = p_parameters
+            .font_pack
+            .bold
+            .map(|p_font| builder.add_font(p_font));
+        let bold_italic = p_parameters
+            .font_pack
+            .bold_italic
+            .map(|p_font| builder.add_font(p_font));
+
+        let brush = builder.build(
+            p_parameters.server.device(),
+            p_parameters.server.surface_configuration().width,
+            p_parameters.server.surface_configuration().height,
+            p_parameters.server.surface_configuration().format,
+        );
+
+        Ok(TextBrushContext {
+            brush,
+            normal,
+            italic,
+            bold,
+            bold_italic,
+        })
+    }
+}
+
 pub struct TextBrushContext<T: font_pack::Font = font_pack::FontArc> {
     pub brush: TextBrush<T>,
     pub normal: FontId,

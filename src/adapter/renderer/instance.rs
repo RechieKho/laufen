@@ -11,7 +11,7 @@ pub type RawTransformationMatrix = [[f32; 4]; 4];
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable, repr_trait::C)]
 pub struct Instance {
-    pub transformation_matrix: RawTransformationMatrix,
+    transformation_matrix: RawTransformationMatrix,
 }
 
 const INSTANCE_BUFFER_ATTRIBUTES: [vertex_buffer::VertexAttribute; 4] = vertex_buffer::vertex_attr_array![5 => Float32x4, 6 => Float32x4, 7 => Float32x4, 8 => Float32x4];

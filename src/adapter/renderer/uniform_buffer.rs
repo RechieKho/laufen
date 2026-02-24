@@ -67,14 +67,17 @@ impl bind_group::ToBindGroupContext for UniformBuffer {
         p_label: Option<&str>,
     ) -> bind_group::BindGroupContext {
         let layout = self.create_bind_group_layout(p_server);
-        let bind_group = p_server.create_bind_group(&rendering_server::BindGroupDescriptor {
-            layout: &layout,
-            entries: &[rendering_server::BindGroupEntry {
-                binding: 0,
-                resource: (*self).as_entire_binding(),
-            }],
-            label: p_label,
-        });
+        let bind_group =
+            p_server
+                .device()
+                .create_bind_group(&rendering_server::BindGroupDescriptor {
+                    layout: &layout,
+                    entries: &[rendering_server::BindGroupEntry {
+                        binding: 0,
+                        resource: (*self).as_entire_binding(),
+                    }],
+                    label: p_label,
+                });
 
         bind_group::BindGroupContext {
             bind_group,

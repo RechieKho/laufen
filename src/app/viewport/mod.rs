@@ -11,6 +11,7 @@ pub struct Viewport {
     quad_render_pipeline_context: quad::QuadRenderPipelineContext,
     camera_context: camera::CameraContext,
     text_brush_context: text::TextBrushContext,
+    depth_stencil_context: depth_stencil_context::DepthStencilContext,
 
     #[getset(get = "pub", get_mut = "pub")]
     rendering_server: rendering_server::RenderingServer,
@@ -59,23 +60,42 @@ impl Viewport {
         let texture_atlas = p_texture_atlas_builder.build(GridTextureAtlasBuilderParameters {
             server: &rendering_server,
         })?;
-        let quad_render_pipeline_context =
-            quad::QuadRenderPipelineContext::new(&rendering_server, &camera_context, texture_atlas);
+        let depth_stencil_context = depth_stencil_context::DepthStencilContextBuilder::default()
+            .build(
+                depth_stencil_context::DepthStencilContextBuilderParameters {
+                    server: &rendering_server,
+                },
+            );
+
+        let quad_render_pipeline_context = quad::QuadRenderPipelineContext::new(
+            &rendering_server,
+            &camera_context,
+            texture_atlas,
+            &depth_stencil_context,
+        );
         camera_context.properties.aspect_ratio =
             window_size.width as f32 / window_size.height as f32;
-        let text_brush_context = rendering_server.load_default_text_brush()?;
+
+        let text_brush_context_builder = text::TextBrushContextBuilder {
+            depth_stencil_state: Some(depth_stencil_context.depth_stencil_state().clone()),
+        };
+        let text_brush_context =
+            text_brush_context_builder.build_with_default_font(&rendering_server)?;
 
         Ok(Self {
             rendering_server,
             camera_context,
             quad_render_pipeline_context,
             text_brush_context,
+            depth_stencil_context,
         })
     }
 
     pub fn resize(&mut self, p_width: u32, p_height: u32) {
         self.rendering_server.resize(p_width, p_height);
         self.camera_context.properties.aspect_ratio = p_width as f32 / p_height as f32;
+        self.depth_stencil_context
+            .rebuild_depth_texture_context(&self.rendering_server);
         self.text_brush_context
             .resize(p_width as _, p_height as _, self.rendering_server.queue());
     }
@@ -113,24 +133,57 @@ impl Viewport {
             .queue(&self.rendering_server, p_parameters.text_sections)
             .map_err(anyhow::Error::msg)?;
 
-        self.camera_context
-            .submit(self.rendering_server.queue_mut());
-        let render_pass_builder = rendering_server::TypicalRenderPassBuilder::default();
+        self.camera_context.submit(self.rendering_server.queue());
+
         self.rendering_server
-            .render_with_typical_pass(
-                &mut |p_server: &rendering_server::RenderingServer,
-                      p_render_pass: &mut rendering_server::RenderPass| {
-                    self.text_brush_context.submit(p_render_pass);
+            .render(&mut |p_server, p_encoder, p_color_texture_view| {
+                {
+                    let render_pass_builder = render_pass_context::RenderPassContextBuilder {
+                        ..Default::default()
+                    };
+                    let mut pass = render_pass_builder.build(
+                        render_pass_context::RenderPassContextBuilderParameters {
+                            server: p_server,
+                            encoder: p_encoder,
+                            color_texture_view: p_color_texture_view,
+                            depth_texture_view: self
+                                .depth_stencil_context
+                                .depth_texture_context()
+                                .view(),
+                        },
+                    );
 
                     self.quad_render_pipeline_context.draw(
                         p_server,
-                        p_render_pass,
+                        &mut pass.render_pass,
                         &self.camera_context,
                         p_parameters.quad_instances,
                     );
-                },
-                &render_pass_builder,
-            )
+                }
+
+                {
+                    let render_pass_builder = render_pass_context::RenderPassContextBuilder {
+                        color_attachment_operations: rendering_server::Operations {
+                            load: rendering_server::LoadOp::Load,
+                            store: rendering_server::StoreOp::Store,
+                        },
+                        ..Default::default()
+                    };
+                    let mut pass = render_pass_builder.build(
+                        render_pass_context::RenderPassContextBuilderParameters {
+                            server: p_server,
+                            encoder: p_encoder,
+                            color_texture_view: p_color_texture_view,
+                            depth_texture_view: self
+                                .depth_stencil_context
+                                .depth_texture_context()
+                                .view(),
+                        },
+                    );
+
+                    self.text_brush_context.submit(&mut pass.render_pass);
+                }
+            })
             .map_err(anyhow::Error::msg)
     }
 }

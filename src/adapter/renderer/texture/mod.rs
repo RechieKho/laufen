@@ -4,6 +4,8 @@ use super::bind_group;
 use super::bind_group::ToBindGroupContext;
 use super::rendering_server;
 
+#[derive(Clone, partially::Partial)]
+#[partially(derive(Default))]
 pub struct TextureContextBuilder<'a> {
     pub label: Option<&'a str>,
 
@@ -114,7 +116,7 @@ impl<'a> TextureContextBuilder<'a> {
         self,
         p_server: &rendering_server::RenderingServer,
     ) -> TextureContext {
-        let sample_image_bytes = include_bytes!("sample_image.png");
+        let sample_image_bytes = include_bytes!("./sample_image.png");
         self.build_from_image_bytes(TextureContextBuilderParametersFromImageBytes {
             server: p_server,
             image_bytes: sample_image_bytes,
@@ -199,10 +201,14 @@ impl<'a> TextureContextBuilder<'a> {
     }
 }
 
+#[derive(getset::Getters)]
 pub struct TextureContext {
-    pub texture: rendering_server::Texture,
-    pub view: rendering_server::TextureView,
-    pub sampler: rendering_server::Sampler,
+    #[getset(get = "pub")]
+    pub(super) texture: rendering_server::Texture,
+    #[getset(get = "pub")]
+    pub(super) view: rendering_server::TextureView,
+    #[getset(get = "pub")]
+    pub(super) sampler: rendering_server::Sampler,
 }
 
 impl bind_group::ToBindGroupContext for TextureContext {
@@ -239,20 +245,23 @@ impl bind_group::ToBindGroupContext for TextureContext {
         p_label: Option<&str>,
     ) -> bind_group::BindGroupContext {
         let layout = self.create_bind_group_layout(p_server);
-        let bind_group = p_server.create_bind_group(&rendering_server::BindGroupDescriptor {
-            layout: &layout,
-            entries: &[
-                rendering_server::BindGroupEntry {
-                    binding: 0,
-                    resource: rendering_server::BindingResource::TextureView(&self.view),
-                },
-                rendering_server::BindGroupEntry {
-                    binding: 1,
-                    resource: rendering_server::BindingResource::Sampler(&self.sampler),
-                },
-            ],
-            label: p_label,
-        });
+        let bind_group =
+            p_server
+                .device()
+                .create_bind_group(&rendering_server::BindGroupDescriptor {
+                    layout: &layout,
+                    entries: &[
+                        rendering_server::BindGroupEntry {
+                            binding: 0,
+                            resource: rendering_server::BindingResource::TextureView(&self.view),
+                        },
+                        rendering_server::BindGroupEntry {
+                            binding: 1,
+                            resource: rendering_server::BindingResource::Sampler(&self.sampler),
+                        },
+                    ],
+                    label: p_label,
+                });
         bind_group::BindGroupContext {
             bind_group_layout: layout,
             bind_group,
@@ -298,12 +307,11 @@ impl TextureContext {
     }
 }
 
-#[derive(getset::Getters, getset::MutGetters)]
+#[derive(getset::Getters)]
 pub struct BoundedTextureContext {
-    #[getset(get = "pub", get_mut = "pub")]
+    #[getset(get = "pub")]
     texture_context: TextureContext,
-
-    #[getset(get = "pub", get_mut = "pub")]
+    #[getset(get = "pub")]
     bind_group_context: bind_group::BindGroupContext,
 }
 

@@ -1,9 +1,13 @@
 use super::rendering_server;
 
+#[derive(getset::Getters)]
 pub struct BindGroupContext {
-    pub bind_group: rendering_server::BindGroup,
-    pub bind_group_layout: rendering_server::BindGroupLayout,
     pub bind_group_offset: u32,
+
+    #[getset(get = "pub")]
+    pub(super) bind_group: rendering_server::BindGroup,
+    #[getset(get = "pub")]
+    pub(super) bind_group_layout: rendering_server::BindGroupLayout,
 }
 
 pub trait ToBindGroupContext {
@@ -18,7 +22,9 @@ pub trait ToBindGroupContext {
         &self,
         p_server: &rendering_server::RenderingServer,
     ) -> rendering_server::BindGroupLayout {
-        p_server.create_bind_group_layout(&Self::BIND_GROUP_LAYOUT_DESCRIPTOR)
+        p_server
+            .device()
+            .create_bind_group_layout(&Self::BIND_GROUP_LAYOUT_DESCRIPTOR)
     }
 }
 
