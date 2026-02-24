@@ -166,9 +166,16 @@ impl<'a> GridTextureAtlasBuilder<'a> {
                 self.cell_size.get(),
                 image::ColorType::Rgb8,
             );
-            let texture_context = p_parameters
-                .server
-                .load_texture_from_image(&image, self.texture_label)?;
+            let texture_context_builder = texture::TextureContextBuilder {
+                label: self.texture_label,
+                ..Default::default()
+            };
+            let texture_context = texture_context_builder.build_from_image(
+                texture::TextureContextBuilderParametersFromImage {
+                    server: p_parameters.server,
+                    image: &image,
+                },
+            );
             let bounded_texture_context =
                 texture::BoundedTextureContext::new(p_parameters.server, texture_context);
             return Ok(GridTextureAtlas {
@@ -214,9 +221,16 @@ impl<'a> GridTextureAtlasBuilder<'a> {
             );
         }
 
-        let texture_context = p_parameters
-            .server
-            .load_texture_from_image(&image, self.texture_label)?;
+        let texture_context_builder = texture::TextureContextBuilder {
+            label: self.texture_label,
+            ..Default::default()
+        };
+        let texture_context = texture_context_builder.build_from_image(
+            texture::TextureContextBuilderParametersFromImage {
+                server: p_parameters.server,
+                image: &image,
+            },
+        );
         let bounded_texture_context =
             texture::BoundedTextureContext::new(p_parameters.server, texture_context);
         Ok(GridTextureAtlas {

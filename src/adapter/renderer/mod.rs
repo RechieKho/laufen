@@ -61,7 +61,8 @@ impl SampleRenderingContext {
         );
         data.set_indices(p_server, Some(&Self::TRIANGLE_INDICES));
 
-        let texture_context = p_server.load_sample_texture()?;
+        let texture_context =
+            texture::TextureContextBuilder::default().build_from_sample_image(p_server);
         let bounded_texture_context =
             texture::BoundedTextureContext::new(p_server, texture_context);
 

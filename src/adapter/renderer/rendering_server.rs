@@ -1,6 +1,5 @@
 use super::text;
 use super::texture;
-use image::GenericImageView;
 use std::num::NonZero;
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
@@ -276,8 +275,6 @@ impl<'a> TypicalRenderPassBuilder<'a> {
 }
 
 impl RenderingServer {
-    const DEPTH_TEXTURE_FORMAT: TextureFormat = TextureFormat::Depth32Float;
-
     pub fn create_buffer(&self, p_descriptor: &util::BufferInitDescriptor) -> Buffer {
         self.device.create_buffer_init(p_descriptor)
     }
@@ -335,162 +332,10 @@ impl RenderingServer {
         })
     }
 
-    pub fn load_sample_texture(&self) -> anyhow::Result<texture::TextureContext> {
-        let default_sample_bytes = include_bytes!("sample_image.png");
-        self.load_texture_from_image_bytes(default_sample_bytes, Some("Sample image"))
-    }
-
-    pub fn load_texture_from_image_bytes(
-        &self,
-        p_bytes: &[u8],
-        p_label: Option<&str>,
-    ) -> anyhow::Result<texture::TextureContext> {
-        let image = image::load_from_memory(p_bytes)?;
-        self.load_texture_from_image(&image, p_label)
-    }
-
-    pub fn update_texture_from_image(
-        &self,
-        p_texture_context: &texture::TextureContext,
-        p_image: &image::DynamicImage,
-    ) -> anyhow::Result<()> {
-        let texture_size = p_texture_context.texture.size();
-        let image_size = p_image.dimensions();
-
-        if texture_size.width != image_size.0 || texture_size.height != image_size.1 {
-            return Err(anyhow::anyhow!(
-                "The texture dimension and image dimension does not match."
-            ));
-        }
-
-        let rgba = p_image.to_rgba8();
-
-        self.queue.write_texture(
-            TexelCopyTextureInfo {
-                aspect: TextureAspect::All,
-                texture: &p_texture_context.texture,
-                mip_level: 0,
-                origin: Origin3d::ZERO,
-            },
-            &rgba,
-            TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(4 * image_size.0),
-                rows_per_image: Some(image_size.1),
-            },
-            texture_size,
-        );
-
-        Ok(())
-    }
-
-    pub fn load_texture_from_image(
-        &self,
-        p_image: &image::DynamicImage,
-        p_label: Option<&str>,
-    ) -> anyhow::Result<texture::TextureContext> {
-        let rgba = p_image.to_rgba8();
-        let dimensions = p_image.dimensions();
-
-        let size = Extent3d {
-            width: dimensions.0,
-            height: dimensions.1,
-            depth_or_array_layers: 1,
-        };
-        let texture = self.device.create_texture(&TextureDescriptor {
-            label: p_label,
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format: TextureFormat::Rgba8UnormSrgb,
-            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-
-        self.queue.write_texture(
-            TexelCopyTextureInfo {
-                aspect: TextureAspect::All,
-                texture: &texture,
-                mip_level: 0,
-                origin: Origin3d::ZERO,
-            },
-            &rgba,
-            TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(4 * dimensions.0),
-                rows_per_image: Some(dimensions.1),
-            },
-            size,
-        );
-
-        let view = texture.create_view(&TextureViewDescriptor::default());
-        let sampler = self.device.create_sampler(&SamplerDescriptor {
-            address_mode_u: AddressMode::ClampToEdge,
-            address_mode_v: AddressMode::ClampToEdge,
-            address_mode_w: AddressMode::ClampToEdge,
-            mag_filter: FilterMode::Nearest,
-            min_filter: FilterMode::Nearest,
-            mipmap_filter: MipmapFilterMode::Nearest,
-            ..Default::default()
-        });
-
-        Ok(texture::TextureContext {
-            texture,
-            view,
-            sampler,
-        })
-    }
-
-    pub fn load_depth_texture(
-        &self,
-        p_label: Option<&str>,
-        p_depth_format: TextureFormat,
-    ) -> texture::TextureContext {
-        let size = Extent3d {
-            // 2.
-            width: self.surface_configuration.width.max(1),
-            height: self.surface_configuration.height.max(1),
-            depth_or_array_layers: 1,
-        };
-        let desc = TextureDescriptor {
-            label: p_label,
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format: p_depth_format,
-            usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        };
-        let texture = self.device.create_texture(&desc);
-
-        let view = texture.create_view(&TextureViewDescriptor::default());
-        let sampler = self.device.create_sampler(&SamplerDescriptor {
-            address_mode_u: AddressMode::ClampToEdge,
-            address_mode_v: AddressMode::ClampToEdge,
-            address_mode_w: AddressMode::ClampToEdge,
-            mag_filter: FilterMode::Linear,
-            min_filter: FilterMode::Linear,
-            mipmap_filter: MipmapFilterMode::Nearest,
-            compare: Some(CompareFunction::LessEqual),
-            lod_min_clamp: 0.0,
-            lod_max_clamp: 100.0,
-            ..Default::default()
-        });
-
-        texture::TextureContext {
-            texture,
-            view,
-            sampler,
-        }
-    }
-
     fn update_depth_stencil_context(&mut self) {
-        let depth_texture_context =
-            self.load_depth_texture(Some("Depth texture"), Self::DEPTH_TEXTURE_FORMAT);
+        let depth_texture_context = texture::TextureContextBuilder::spawn_depth_texture(self);
         let depth_stencil_state = DepthStencilState {
-            format: RenderingServer::DEPTH_TEXTURE_FORMAT,
+            format: texture::TextureContextBuilder::DEFAULT_DEPTH_TEXTURE_FORMAT,
             depth_write_enabled: true,
             depth_compare: CompareFunction::Less,
             stencil: StencilState::default(),
