@@ -62,10 +62,13 @@ impl EngineBuilder {
 }
 
 impl Engine {
-    pub fn render_world(&mut self, p_aabb: &world::iaabb::IAabb) -> anyhow::Result<()> {
+    pub fn render_world(
+        &mut self,
+        p_point_cluster: world::point_cluster::PointCluster,
+    ) -> anyhow::Result<()> {
         let mut quad_instances = Vec::<quad::QuadInstance>::default();
 
-        for point in p_aabb.iter_points() {
+        for point in p_point_cluster.into_iter() {
             let slot = self.world.get_slot(point);
 
             if slot.cube_instance.is_none() {
@@ -163,12 +166,12 @@ impl Engine {
     }
 
     pub fn render(&mut self) -> anyhow::Result<()> {
-        let aabb = &world::iaabb::IAabb {
+        let point_cluster = world::point_cluster::PointCluster {
             min: glam::IVec3::new(-20, -10, -20),
             max: glam::IVec3::new(20, 10, 20),
         };
 
-        self.render_world(aabb)
+        self.render_world(point_cluster)
     }
 
     pub fn process(

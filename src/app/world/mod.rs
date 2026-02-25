@@ -2,8 +2,8 @@ use morton::Morton;
 
 pub mod chunk;
 pub mod cube;
-pub mod iaabb;
 pub mod morton;
+pub mod point_cluster;
 pub mod slot;
 
 pub struct World {
