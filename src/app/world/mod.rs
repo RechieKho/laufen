@@ -48,10 +48,7 @@ impl World {
         chunk.get(code)
     }
 
-    pub fn get_slot_mut<L: chunk::ChunkLoader, S: chunk::ChunkSaver>(
-        &mut self,
-        p_position: glam::IVec3,
-    ) -> &mut slot::Slot {
+    pub fn get_slot_mut(&mut self, p_position: glam::IVec3) -> &mut slot::Slot {
         let (code, remained) = chunk::ChunkMorton::consume(p_position);
         let key = chunk::ChunkKey::from(remained);
         if !self.chunk_map.contains_key(&key) {

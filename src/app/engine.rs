@@ -62,13 +62,22 @@ impl EngineBuilder {
 }
 
 impl Engine {
-    pub fn render_world(
+    pub fn render_world<Q: parry3d::query::PointQuery>(
         &mut self,
         p_point_cluster: world::point_cluster::PointCluster,
+        p_point_query: &Q,
+        p_pose: &parry3d::math::Pose3,
     ) -> anyhow::Result<()> {
         let mut quad_instances = Vec::<quad::QuadInstance>::default();
 
         for point in p_point_cluster.into_iter() {
+            if !p_point_query.contains_point(
+                p_pose,
+                parry3d::math::Vec3::new(point.x as _, point.y as _, point.z as _),
+            ) {
+                continue;
+            }
+
             let slot = self.world.get_slot(point);
 
             if slot.cube_instance.is_none() {
@@ -166,12 +175,25 @@ impl Engine {
     }
 
     pub fn render(&mut self) -> anyhow::Result<()> {
-        let point_cluster = world::point_cluster::PointCluster {
-            min: glam::IVec3::new(-20, -10, -20),
-            max: glam::IVec3::new(20, 10, 20),
-        };
+        let camera_properties = self.viewport.camera_properties();
+        let cone_height = (camera_properties.z_far - camera_properties.z_near).abs();
+        let cone_radius = cone_height * (camera_properties.fov / 3.0).tan();
+        let cone = parry3d::shape::Cone::new(cone_height / 2.0, cone_radius);
 
-        self.render_world(point_cluster)
+        let pose = parry3d::math::Pose3::from_mat4(
+            glam::Mat4::look_to_rh(
+                camera_properties.origin
+                    + camera_properties.direction.normalize() * camera_properties.z_near,
+                camera_properties.direction,
+                glam::Vec3::Y,
+            )
+            .inverse()
+                * glam::Mat4::from_rotation_x(std::f32::consts::PI / 2.0),
+        );
+        let aabb = cone.aabb(&pose);
+        let point_cluster = world::point_cluster::PointCluster::from(aabb);
+
+        self.render_world(point_cluster, &cone, &pose)
     }
 
     pub fn process(
@@ -193,7 +215,7 @@ impl Engine {
         }
 
         let camera_properties = self.viewport.camera_properties();
-        const LINEAR_SPEED: f32 = 0.05;
+        const LINEAR_SPEED: f32 = 0.2;
         const ANGULAR_SPEED: f32 = std::f32::consts::PI / 100.0;
 
         if p_input.key_held(winit::keyboard::KeyCode::KeyW) {

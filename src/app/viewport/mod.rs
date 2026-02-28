@@ -38,8 +38,8 @@ impl Default for ViewportCameraProperties {
             origin: glam::Vec3::new(0.0, 0.0, 5.0),
             direction: glam::Vec3::NEG_Z,
             fov: std::f32::consts::PI / 4.0,
-            z_near: 0.1,
-            z_far: 100.0,
+            z_near: 1.0,
+            z_far: 25.0,
         }
     }
 }

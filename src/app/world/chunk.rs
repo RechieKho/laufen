@@ -4,7 +4,7 @@ use super::morton;
 use super::morton::Morton;
 use super::slot;
 
-#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub struct ChunkKey(glam::IVec3);
 
 impl From<glam::IVec3> for ChunkKey {

@@ -12,7 +12,7 @@ pub trait Morton {
         let p_value = p_value.unsigned_abs();
         let bit_mask = (1 << Self::BIT_COUNT_PER_COMPONENT) - 1;
         let picked = p_value & bit_mask;
-        let remained = (p_value ^ picked >> Self::BIT_COUNT_PER_COMPONENT) as i32 * signum;
+        let remained = (p_value >> Self::BIT_COUNT_PER_COMPONENT) as i32 * signum;
 
         (picked as u16, remained)
     }
