@@ -78,7 +78,7 @@ impl Engine {
                 continue;
             }
 
-            let slot = self.world.get_slot(point);
+            let slot = self.world.slot(point);
 
             if slot.cube_instance.is_none() {
                 continue;

@@ -38,17 +38,7 @@ impl World {
         });
     }
 
-    pub fn get_slot(&mut self, p_position: glam::IVec3) -> &slot::Slot {
-        let (code, remained) = chunk::ChunkMorton::consume(p_position);
-        let key = chunk::ChunkKey::from(remained);
-        if !self.chunk_map.contains_key(&key) {
-            self.load(key);
-        }
-        let chunk = self.chunk_map.get(&key).unwrap();
-        chunk.get(code)
-    }
-
-    pub fn get_slot_mut(&mut self, p_position: glam::IVec3) -> &mut slot::Slot {
+    pub fn slot(&mut self, p_position: glam::IVec3) -> &mut slot::Slot {
         let (code, remained) = chunk::ChunkMorton::consume(p_position);
         let key = chunk::ChunkKey::from(remained);
         if !self.chunk_map.contains_key(&key) {

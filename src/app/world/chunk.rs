@@ -109,7 +109,7 @@ impl Chunk {
     }
 }
 
-pub type ChunkMap = std::collections::BTreeMap<ChunkKey, Chunk>;
+pub type ChunkMap = std::collections::HashMap<ChunkKey, Chunk>;
 
 #[derive(Default)]
 pub struct SampleChunkLoader();
