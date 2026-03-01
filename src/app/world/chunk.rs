@@ -113,7 +113,7 @@ impl Chunk {
     }
 }
 
-pub type ChunkMap = std::collections::HashMap<ChunkKey, Chunk>;
+pub type ChunkMap = rapidhash::RapidHashMap<ChunkKey, Chunk>;
 
 #[derive(Default)]
 pub struct SampleChunkLoader();

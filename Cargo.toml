@@ -29,6 +29,7 @@ wgpu_text = "28.0.1"
 gfx_glyph = "0.17.1"
 glam = { version = "0.30.10" , features = [ "bytemuck" ] }
 parry3d = { version = "0.26.0", features = [ "bytemuck-serialize" ] }
+rapidhash = "4.4.1"
 
 [profile.dev]
 opt-level = 2
