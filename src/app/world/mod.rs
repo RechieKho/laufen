@@ -21,9 +21,105 @@ impl World {
         }
     }
 
+    fn bake_hidden_face(&mut self, p_position: glam::IVec3) {
+        self.slot(p_position).display_upward_quad = self
+            .slot(p_position + glam::IVec3::Y)
+            .cube_instance
+            .is_none();
+        self.slot(p_position).display_downward_quad = self
+            .slot(p_position + glam::IVec3::NEG_Y)
+            .cube_instance
+            .is_none();
+        self.slot(p_position).display_left_quad = self
+            .slot(p_position + glam::IVec3::NEG_X)
+            .cube_instance
+            .is_none();
+        self.slot(p_position).display_right_quad = self
+            .slot(p_position + glam::IVec3::X)
+            .cube_instance
+            .is_none();
+        self.slot(p_position).display_front_quad = self
+            .slot(p_position + glam::IVec3::NEG_Z)
+            .cube_instance
+            .is_none();
+        self.slot(p_position).display_back_quad = self
+            .slot(p_position + glam::IVec3::Z)
+            .cube_instance
+            .is_none();
+    }
+
+    pub fn bake_multiple_hidden_face(&mut self, p_point_cluster: point_cluster::PointCluster) {
+        for point in p_point_cluster.into_iter() {
+            self.bake_hidden_face(point);
+        }
+    }
+
     fn load(&mut self, p_key: chunk::ChunkKey) {
-        self.chunk_map
-            .insert(p_key, self.loader.load_chunk(p_key).unwrap());
+        let data = self.loader.load_chunk(p_key).unwrap();
+        self.chunk_map.insert(p_key, data.chunk);
+
+        if !data.require_hidden_face_baking {
+            return;
+        }
+
+        let chunk_index = *p_key;
+        let mut point_cluster = chunk::ChunkMorton::compute_cluster(chunk_index);
+
+        point_cluster.min.x += if self
+            .chunk_map
+            .contains_key(&chunk::ChunkKey::from(chunk_index + glam::IVec3::NEG_X))
+        {
+            -1
+        } else {
+            1
+        };
+
+        point_cluster.min.y += if self
+            .chunk_map
+            .contains_key(&chunk::ChunkKey::from(chunk_index + glam::IVec3::NEG_Y))
+        {
+            -1
+        } else {
+            1
+        };
+
+        point_cluster.min.z += if self
+            .chunk_map
+            .contains_key(&chunk::ChunkKey::from(chunk_index + glam::IVec3::NEG_Z))
+        {
+            -1
+        } else {
+            1
+        };
+
+        point_cluster.max.x += if self
+            .chunk_map
+            .contains_key(&chunk::ChunkKey::from(chunk_index + glam::IVec3::X))
+        {
+            1
+        } else {
+            -1
+        };
+
+        point_cluster.max.y += if self
+            .chunk_map
+            .contains_key(&chunk::ChunkKey::from(chunk_index + glam::IVec3::Y))
+        {
+            1
+        } else {
+            -1
+        };
+
+        point_cluster.max.z += if self
+            .chunk_map
+            .contains_key(&chunk::ChunkKey::from(chunk_index + glam::IVec3::Z))
+        {
+            1
+        } else {
+            -1
+        };
+
+        self.bake_multiple_hidden_face(point_cluster);
     }
 
     pub fn purge_beyond(&mut self, p_center: glam::IVec3, p_max_chebyshev_distance: u32) {

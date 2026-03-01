@@ -1,5 +1,4 @@
-use crate::app::world::cube;
-
+use super::cube;
 use super::morton;
 use super::morton::Morton;
 use super::slot;
@@ -67,8 +66,13 @@ impl Ord for ChunkKey {
     }
 }
 
+pub struct ChunkLoadData {
+    pub chunk: Chunk,
+    pub require_hidden_face_baking: bool,
+}
+
 pub trait ChunkLoader {
-    fn load_chunk(&mut self, p_key: ChunkKey) -> anyhow::Result<Chunk>;
+    fn load_chunk(&mut self, p_key: ChunkKey) -> anyhow::Result<ChunkLoadData>;
 }
 
 pub trait ChunkSaver {
@@ -115,7 +119,7 @@ pub type ChunkMap = std::collections::HashMap<ChunkKey, Chunk>;
 pub struct SampleChunkLoader();
 
 impl ChunkLoader for SampleChunkLoader {
-    fn load_chunk(&mut self, _p_key: ChunkKey) -> anyhow::Result<Chunk> {
+    fn load_chunk(&mut self, _p_key: ChunkKey) -> anyhow::Result<ChunkLoadData> {
         let mut chunk = Chunk::default();
         *chunk.get_from_position_mut(glam::IVec3::ZERO) = slot::Slot {
             cube_instance: Some(cube::CubeInstance::try_default()?),
@@ -137,7 +141,10 @@ impl ChunkLoader for SampleChunkLoader {
             cube_instance: Some(cube::CubeInstance::try_default()?),
             ..Default::default()
         };
-        Ok(chunk)
+        Ok(ChunkLoadData {
+            chunk,
+            require_hidden_face_baking: true,
+        })
     }
 }
 

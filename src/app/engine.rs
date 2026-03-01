@@ -93,73 +93,89 @@ impl Engine {
             let cube = cube.unwrap();
             let cube_transformation = glam::Mat4::from(cube_instance.orientation);
 
-            let back_quad = quad::QuadInstance::new(
-                cube_transformation
-                    * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
-                        0.0 + point.x as f32,
-                        0.0 + point.y as f32,
-                        0.5 + point.z as f32,
-                    ))
-                    * quad::QuadRenderPipelineContext::QUAD_BACKWARD_MATRIX,
-                cube.world_texture_atlas_index_back,
-            );
-            let front_quad = quad::QuadInstance::new(
-                cube_transformation
-                    * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
-                        0.0 + point.x as f32,
-                        0.0 + point.y as f32,
-                        -0.5 + point.z as f32,
-                    ))
-                    * quad::QuadRenderPipelineContext::QUAD_FORWARD_MATRIX,
-                cube.world_texture_atlas_index_front,
-            );
-            let up_quad = quad::QuadInstance::new(
-                cube_transformation
-                    * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
-                        0.0 + point.x as f32,
-                        0.5 + point.y as f32,
-                        0.0 + point.z as f32,
-                    ))
-                    * quad::QuadRenderPipelineContext::QUAD_UPWARD_MATRIX,
-                cube.world_texture_atlas_index_top,
-            );
-            let down_quad = quad::QuadInstance::new(
-                cube_transformation
-                    * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
-                        0.0 + point.x as f32,
-                        -0.5 + point.y as f32,
-                        0.0 + point.z as f32,
-                    ))
-                    * quad::QuadRenderPipelineContext::QUAD_DOWNWARD_MATRIX,
-                cube.world_texture_atlas_index_bottom,
-            );
-            let left_quad = quad::QuadInstance::new(
-                cube_transformation
-                    * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
-                        -0.5 + point.x as f32,
-                        0.0 + point.y as f32,
-                        0.0 + point.z as f32,
-                    ))
-                    * quad::QuadRenderPipelineContext::QUAD_LEFT_MATRIX,
-                cube.world_texture_atlas_index_left,
-            );
-            let right_quad = quad::QuadInstance::new(
-                cube_transformation
-                    * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
-                        0.5 + point.x as f32,
-                        0.0 + point.y as f32,
-                        0.0 + point.z as f32,
-                    ))
-                    * quad::QuadRenderPipelineContext::QUAD_RIGHT_MATRIX,
-                cube.world_texture_atlas_index_right,
-            );
+            if slot.display_back_quad {
+                let back_quad = quad::QuadInstance::new(
+                    cube_transformation
+                        * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
+                            0.0 + point.x as f32,
+                            0.0 + point.y as f32,
+                            0.5 + point.z as f32,
+                        ))
+                        * quad::QuadRenderPipelineContext::QUAD_BACKWARD_MATRIX,
+                    cube.world_texture_atlas_index_back,
+                );
+                quad_instances.push(back_quad);
+            }
 
-            quad_instances.push(back_quad);
-            quad_instances.push(front_quad);
-            quad_instances.push(left_quad);
-            quad_instances.push(right_quad);
-            quad_instances.push(up_quad);
-            quad_instances.push(down_quad);
+            if slot.display_front_quad {
+                let front_quad = quad::QuadInstance::new(
+                    cube_transformation
+                        * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
+                            0.0 + point.x as f32,
+                            0.0 + point.y as f32,
+                            -0.5 + point.z as f32,
+                        ))
+                        * quad::QuadRenderPipelineContext::QUAD_FORWARD_MATRIX,
+                    cube.world_texture_atlas_index_front,
+                );
+                quad_instances.push(front_quad);
+            }
+
+            if slot.display_upward_quad {
+                let up_quad = quad::QuadInstance::new(
+                    cube_transformation
+                        * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
+                            0.0 + point.x as f32,
+                            0.5 + point.y as f32,
+                            0.0 + point.z as f32,
+                        ))
+                        * quad::QuadRenderPipelineContext::QUAD_UPWARD_MATRIX,
+                    cube.world_texture_atlas_index_top,
+                );
+                quad_instances.push(up_quad);
+            }
+
+            if slot.display_downward_quad {
+                let down_quad = quad::QuadInstance::new(
+                    cube_transformation
+                        * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
+                            0.0 + point.x as f32,
+                            -0.5 + point.y as f32,
+                            0.0 + point.z as f32,
+                        ))
+                        * quad::QuadRenderPipelineContext::QUAD_DOWNWARD_MATRIX,
+                    cube.world_texture_atlas_index_bottom,
+                );
+                quad_instances.push(down_quad);
+            }
+
+            if slot.display_left_quad {
+                let left_quad = quad::QuadInstance::new(
+                    cube_transformation
+                        * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
+                            -0.5 + point.x as f32,
+                            0.0 + point.y as f32,
+                            0.0 + point.z as f32,
+                        ))
+                        * quad::QuadRenderPipelineContext::QUAD_LEFT_MATRIX,
+                    cube.world_texture_atlas_index_left,
+                );
+                quad_instances.push(left_quad);
+            }
+
+            if slot.display_right_quad {
+                let right_quad = quad::QuadInstance::new(
+                    cube_transformation
+                        * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
+                            0.5 + point.x as f32,
+                            0.0 + point.y as f32,
+                            0.0 + point.z as f32,
+                        ))
+                        * quad::QuadRenderPipelineContext::QUAD_RIGHT_MATRIX,
+                    cube.world_texture_atlas_index_right,
+                );
+                quad_instances.push(right_quad);
+            }
         }
 
         let frame_per_second_text = format!("FPS: {}", self.frame_per_second);
@@ -244,6 +260,18 @@ impl Engine {
             self.viewport
                 .set_camera_properties(viewport::PartialViewportCameraProperties {
                     direction: Some(camera_properties.direction.rotate_y(-ANGULAR_SPEED)),
+                    ..Default::default()
+                });
+        } else if p_input.key_held(winit::keyboard::KeyCode::KeyQ) {
+            self.viewport
+                .set_camera_properties(viewport::PartialViewportCameraProperties {
+                    origin: Some(camera_properties.origin - glam::Vec3::Y * LINEAR_SPEED),
+                    ..Default::default()
+                });
+        } else if p_input.key_held(winit::keyboard::KeyCode::KeyE) {
+            self.viewport
+                .set_camera_properties(viewport::PartialViewportCameraProperties {
+                    origin: Some(camera_properties.origin - glam::Vec3::NEG_Y * LINEAR_SPEED),
                     ..Default::default()
                 });
         }

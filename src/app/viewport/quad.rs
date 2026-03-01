@@ -200,6 +200,10 @@ impl QuadRenderPipelineContext {
         p_camera_context: &camera::CameraContext,
         p_instances: &[QuadInstance],
     ) {
+        if p_instances.is_empty() {
+            return;
+        }
+
         let mut instance_render_data = render_data::RenderData::default();
         instance_render_data
             .add_vertex_collections(p_server, &[vertex_buffer::ToVertexBuffer(p_instances)]);
