@@ -46,7 +46,7 @@ impl Default for CameraProperties {
             aspect_ratio: 16.0 / 9.0,
             fov_y: std::f32::consts::PI / 4.0,
             z_near: 0.1,
-            z_far: 100.0,
+            z_far: 200.0,
         }
     }
 }

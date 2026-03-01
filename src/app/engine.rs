@@ -1,4 +1,5 @@
 use crate::adapter::renderer::*;
+use crate::app::world::point_cluster;
 
 use super::viewport;
 use super::viewport::quad;
@@ -17,6 +18,7 @@ pub struct Engine {
 
     last_process_timestamp: std::time::Instant,
     frame_per_second: u32,
+    quad_cache: rapidhash::RapidHashMap<glam::IVec3, Vec<quad::QuadInstance>>,
 }
 
 #[derive(partially::Partial)]
@@ -57,124 +59,174 @@ impl EngineBuilder {
             cube_registry,
             last_process_timestamp: std::time::Instant::now(),
             frame_per_second: 0,
+            quad_cache: rapidhash::RapidHashMap::default(),
         })
     }
 }
 
 impl Engine {
+    const QUAD_CACHE_SIZE: i32 = 4;
+
+    #[inline]
+    pub fn convert_slot_position_quad_cache_position(p_position: glam::IVec3) -> glam::IVec3 {
+        p_position.div_euclid(glam::IVec3::splat(Self::QUAD_CACHE_SIZE))
+    }
+
+    #[inline]
+    pub fn convert_quad_cache_position_to_begin_slot_position(
+        p_quad_cache_position: glam::IVec3,
+    ) -> glam::IVec3 {
+        p_quad_cache_position * Self::QUAD_CACHE_SIZE
+    }
+
+    #[inline]
+    pub fn compute_slot_point_cluster_from_quad_cache_position(
+        p_quad_cache_position: glam::IVec3,
+    ) -> point_cluster::PointCluster {
+        point_cluster::PointCluster {
+            min: Self::convert_quad_cache_position_to_begin_slot_position(p_quad_cache_position),
+            max: Self::convert_quad_cache_position_to_begin_slot_position(
+                p_quad_cache_position + 1,
+            ),
+        }
+    }
+
+    pub fn generate_quad_instances_from_slot(
+        &mut self,
+        p_position: glam::IVec3,
+        m_instances: &mut Vec<quad::QuadInstance>,
+    ) {
+        let slot = self.world.slot(p_position);
+
+        if slot.cube_instance.is_none() {
+            return;
+        }
+
+        let cube_instance = slot.cube_instance.unwrap();
+        let cube_id = cube_instance.id;
+        let cube = self.cube_registry.cubes().get(&cube_id);
+        if cube.is_none() {
+            return;
+        }
+        let cube = cube.unwrap();
+        let cube_transformation = glam::Mat4::from(cube_instance.orientation);
+
+        if slot.display_back_quad {
+            let back_quad = quad::QuadInstance::new(
+                cube_transformation
+                    * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
+                        0.0 + p_position.x as f32,
+                        0.0 + p_position.y as f32,
+                        0.5 + p_position.z as f32,
+                    ))
+                    * quad::QuadRenderPipelineContext::QUAD_BACKWARD_MATRIX,
+                cube.world_texture_atlas_index_back,
+            );
+            m_instances.push(back_quad);
+        }
+
+        if slot.display_front_quad {
+            let front_quad = quad::QuadInstance::new(
+                cube_transformation
+                    * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
+                        0.0 + p_position.x as f32,
+                        0.0 + p_position.y as f32,
+                        -0.5 + p_position.z as f32,
+                    ))
+                    * quad::QuadRenderPipelineContext::QUAD_FORWARD_MATRIX,
+                cube.world_texture_atlas_index_front,
+            );
+            m_instances.push(front_quad);
+        }
+
+        if slot.display_upward_quad {
+            let up_quad = quad::QuadInstance::new(
+                cube_transformation
+                    * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
+                        0.0 + p_position.x as f32,
+                        0.5 + p_position.y as f32,
+                        0.0 + p_position.z as f32,
+                    ))
+                    * quad::QuadRenderPipelineContext::QUAD_UPWARD_MATRIX,
+                cube.world_texture_atlas_index_top,
+            );
+            m_instances.push(up_quad);
+        }
+
+        if slot.display_downward_quad {
+            let down_quad = quad::QuadInstance::new(
+                cube_transformation
+                    * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
+                        0.0 + p_position.x as f32,
+                        -0.5 + p_position.y as f32,
+                        0.0 + p_position.z as f32,
+                    ))
+                    * quad::QuadRenderPipelineContext::QUAD_DOWNWARD_MATRIX,
+                cube.world_texture_atlas_index_bottom,
+            );
+            m_instances.push(down_quad);
+        }
+
+        if slot.display_left_quad {
+            let left_quad = quad::QuadInstance::new(
+                cube_transformation
+                    * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
+                        -0.5 + p_position.x as f32,
+                        0.0 + p_position.y as f32,
+                        0.0 + p_position.z as f32,
+                    ))
+                    * quad::QuadRenderPipelineContext::QUAD_LEFT_MATRIX,
+                cube.world_texture_atlas_index_left,
+            );
+            m_instances.push(left_quad);
+        }
+
+        if slot.display_right_quad {
+            let right_quad = quad::QuadInstance::new(
+                cube_transformation
+                    * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
+                        0.5 + p_position.x as f32,
+                        0.0 + p_position.y as f32,
+                        0.0 + p_position.z as f32,
+                    ))
+                    * quad::QuadRenderPipelineContext::QUAD_RIGHT_MATRIX,
+                cube.world_texture_atlas_index_right,
+            );
+            m_instances.push(right_quad);
+        }
+    }
+
     pub fn render_world<Q: parry3d::query::PointQuery>(
         &mut self,
-        p_point_cluster: world::point_cluster::PointCluster,
+        p_quad_cache_point_cluster: world::point_cluster::PointCluster,
         p_point_query: &Q,
         p_pose: &parry3d::math::Pose3,
     ) -> anyhow::Result<()> {
         let mut quad_instances = Vec::<quad::QuadInstance>::default();
 
-        for point in p_point_cluster.into_iter() {
+        for quad_cache_point in p_quad_cache_point_cluster.into_iter() {
             if !p_point_query.contains_point(
                 p_pose,
-                parry3d::math::Vec3::new(point.x as _, point.y as _, point.z as _),
+                parry3d::math::Vec3::new(
+                    quad_cache_point.x as _,
+                    quad_cache_point.y as _,
+                    quad_cache_point.z as _,
+                ),
             ) {
                 continue;
             }
 
-            let slot = self.world.slot(point);
-
-            if slot.cube_instance.is_none() {
-                continue;
-            }
-
-            let cube_instance = slot.cube_instance.unwrap();
-            let cube_id = cube_instance.id;
-            let cube = self.cube_registry.cubes().get(&cube_id);
-            if cube.is_none() {
-                continue;
-            }
-            let cube = cube.unwrap();
-            let cube_transformation = glam::Mat4::from(cube_instance.orientation);
-
-            if slot.display_back_quad {
-                let back_quad = quad::QuadInstance::new(
-                    cube_transformation
-                        * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
-                            0.0 + point.x as f32,
-                            0.0 + point.y as f32,
-                            0.5 + point.z as f32,
-                        ))
-                        * quad::QuadRenderPipelineContext::QUAD_BACKWARD_MATRIX,
-                    cube.world_texture_atlas_index_back,
-                );
-                quad_instances.push(back_quad);
-            }
-
-            if slot.display_front_quad {
-                let front_quad = quad::QuadInstance::new(
-                    cube_transformation
-                        * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
-                            0.0 + point.x as f32,
-                            0.0 + point.y as f32,
-                            -0.5 + point.z as f32,
-                        ))
-                        * quad::QuadRenderPipelineContext::QUAD_FORWARD_MATRIX,
-                    cube.world_texture_atlas_index_front,
-                );
-                quad_instances.push(front_quad);
-            }
-
-            if slot.display_upward_quad {
-                let up_quad = quad::QuadInstance::new(
-                    cube_transformation
-                        * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
-                            0.0 + point.x as f32,
-                            0.5 + point.y as f32,
-                            0.0 + point.z as f32,
-                        ))
-                        * quad::QuadRenderPipelineContext::QUAD_UPWARD_MATRIX,
-                    cube.world_texture_atlas_index_top,
-                );
-                quad_instances.push(up_quad);
-            }
-
-            if slot.display_downward_quad {
-                let down_quad = quad::QuadInstance::new(
-                    cube_transformation
-                        * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
-                            0.0 + point.x as f32,
-                            -0.5 + point.y as f32,
-                            0.0 + point.z as f32,
-                        ))
-                        * quad::QuadRenderPipelineContext::QUAD_DOWNWARD_MATRIX,
-                    cube.world_texture_atlas_index_bottom,
-                );
-                quad_instances.push(down_quad);
-            }
-
-            if slot.display_left_quad {
-                let left_quad = quad::QuadInstance::new(
-                    cube_transformation
-                        * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
-                            -0.5 + point.x as f32,
-                            0.0 + point.y as f32,
-                            0.0 + point.z as f32,
-                        ))
-                        * quad::QuadRenderPipelineContext::QUAD_LEFT_MATRIX,
-                    cube.world_texture_atlas_index_left,
-                );
-                quad_instances.push(left_quad);
-            }
-
-            if slot.display_right_quad {
-                let right_quad = quad::QuadInstance::new(
-                    cube_transformation
-                        * quad::QuadTransformationMatrix::from_translation(glam::Vec3::new(
-                            0.5 + point.x as f32,
-                            0.0 + point.y as f32,
-                            0.0 + point.z as f32,
-                        ))
-                        * quad::QuadRenderPipelineContext::QUAD_RIGHT_MATRIX,
-                    cube.world_texture_atlas_index_right,
-                );
-                quad_instances.push(right_quad);
+            if let Some(instances) = self.quad_cache.get(&quad_cache_point) {
+                quad_instances.extend_from_slice(instances.as_slice());
+            } else {
+                let mut instances = Vec::<quad::QuadInstance>::default();
+                let slot_point_cluster =
+                    Self::compute_slot_point_cluster_from_quad_cache_position(quad_cache_point);
+                for slot_point in slot_point_cluster {
+                    self.generate_quad_instances_from_slot(slot_point, &mut instances);
+                }
+                quad_instances.extend_from_slice(instances.as_slice());
+                self.quad_cache.insert(quad_cache_point, instances);
             }
         }
 
@@ -192,14 +244,17 @@ impl Engine {
 
     pub fn render(&mut self) -> anyhow::Result<()> {
         let camera_properties = self.viewport.camera_properties();
-        let cone_height = (camera_properties.z_far - camera_properties.z_near).abs();
-        let cone_radius = cone_height * (camera_properties.fov / 3.0).tan();
+        let cone_height = (camera_properties.z_far - camera_properties.z_near).abs()
+            / Self::QUAD_CACHE_SIZE as f32;
+        let cone_radius =
+            cone_height * (camera_properties.fov).tan() / Self::QUAD_CACHE_SIZE as f32;
         let cone = parry3d::shape::Cone::new(cone_height / 2.0, cone_radius);
 
         let pose = parry3d::math::Pose3::from_mat4(
             glam::Mat4::look_to_rh(
-                camera_properties.origin
-                    + camera_properties.direction.normalize() * camera_properties.z_near,
+                (camera_properties.origin
+                    + camera_properties.direction.normalize() * camera_properties.z_near)
+                    / Self::QUAD_CACHE_SIZE as f32,
                 camera_properties.direction,
                 glam::Vec3::Y,
             )

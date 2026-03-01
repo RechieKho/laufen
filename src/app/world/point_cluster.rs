@@ -24,14 +24,14 @@ impl From<parry3d::bounding_volume::Aabb> for PointCluster {
     fn from(p_value: parry3d::bounding_volume::Aabb) -> Self {
         Self {
             min: glam::IVec3::new(
-                p_value.mins.x as _,
-                p_value.mins.y as _,
-                p_value.mins.z as _,
+                p_value.mins.x.ceil() as _,
+                p_value.mins.y.ceil() as _,
+                p_value.mins.z.ceil() as _,
             ),
             max: glam::IVec3::new(
-                p_value.maxs.x as _,
-                p_value.maxs.y as _,
-                p_value.maxs.z as _,
+                p_value.maxs.x.ceil() as _,
+                p_value.maxs.y.ceil() as _,
+                p_value.maxs.z.ceil() as _,
             ),
         }
     }
