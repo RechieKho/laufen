@@ -1,4 +1,5 @@
 pub mod engine;
+pub mod spectator;
 pub mod viewport;
 pub mod world;
 
