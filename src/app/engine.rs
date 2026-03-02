@@ -102,6 +102,19 @@ impl Engine {
         }
 
         let camera_properties = self.viewport.camera_properties();
+
+        let purge_origin = glam::IVec3::new(
+            camera_properties.origin.x as _,
+            camera_properties.origin.y as _,
+            camera_properties.origin.z as _,
+        );
+        let purge_distance =
+            ((camera_properties.z_far - camera_properties.z_near).abs() * 5.0) as u32;
+
+        self.spectator
+            .purge_cache_beyond(purge_origin, purge_distance);
+        self.world.purge_beyond(purge_origin, purge_distance);
+
         const LINEAR_SPEED: f32 = 0.2;
         const ANGULAR_SPEED: f32 = std::f32::consts::PI / 100.0;
 

@@ -15,6 +15,11 @@ impl<const N: u32> Spectator<N> {
     pub const LUMP_SIZE: u32 = N;
 
     #[inline]
+    fn convert_slot_position_to_lump_position(p_slot_position: glam::IVec3) -> glam::IVec3 {
+        p_slot_position.div_euclid(glam::IVec3::splat(Self::LUMP_SIZE as _))
+    }
+
+    #[inline]
     fn convert_lump_position_to_slot_position(p_lump_position: glam::IVec3) -> glam::IVec3 {
         p_lump_position * Self::LUMP_SIZE as i32
     }
@@ -193,5 +198,20 @@ impl<const N: u32> Spectator<N> {
         }
 
         quad_instances
+    }
+
+    pub fn purge_cache_beyond(
+        &mut self,
+        p_slot_position: glam::IVec3,
+        p_max_chebyshev_slot_distance: u32,
+    ) {
+        let lump_position = Self::convert_slot_position_to_lump_position(p_slot_position);
+        let max_chebyshev_lump_distance =
+            p_max_chebyshev_slot_distance.div_euclid(Self::LUMP_SIZE as _);
+
+        self.lump.retain(|p_key, _| {
+            let distance = lump_position.chebyshev_distance(*p_key);
+            distance < max_chebyshev_lump_distance
+        })
     }
 }

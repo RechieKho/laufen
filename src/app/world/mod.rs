@@ -122,11 +122,17 @@ impl World {
         self.bake_multiple_hidden_face(point_cluster);
     }
 
-    pub fn purge_beyond(&mut self, p_center: glam::IVec3, p_max_chebyshev_distance: u32) {
+    pub fn purge_beyond(
+        &mut self,
+        p_slot_position: glam::IVec3,
+        p_max_chebyshev_slot_distance: u32,
+    ) {
         self.chunk_map.retain(|p_iter_key, p_iter_chunk| {
             let current_chunk_position: glam::IVec3 = (*p_iter_key).into();
-            let distance = p_center.chebyshev_distance(current_chunk_position);
-            if distance < p_max_chebyshev_distance {
+            let current_slot_position =
+                current_chunk_position * chunk::ChunkMorton::MAX_PER_COMPONENT as i32;
+            let distance = p_slot_position.chebyshev_distance(current_slot_position);
+            if distance < p_max_chebyshev_slot_distance {
                 return true;
             }
             let _ = self.saver.save_chunk(*p_iter_key, p_iter_chunk);
