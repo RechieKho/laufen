@@ -6,19 +6,25 @@ pub mod morton;
 pub mod point_cluster;
 pub mod slot;
 
+#[derive(getset::Getters)]
 pub struct World {
     chunk_map: chunk::ChunkMap,
     loader: Box<dyn chunk::ChunkLoader>,
     saver: Box<dyn chunk::ChunkSaver>,
+
+    #[getset(get = "pub")]
+    cube_registry: cube::CubeRegistry,
 }
 
 impl World {
-    pub fn with_sample_loader_saver() -> Self {
-        Self {
+    pub fn try_sample() -> anyhow::Result<Self> {
+        let builder = cube::CubeRegistryBuilder::with_builtin()?;
+        Ok(Self {
             chunk_map: chunk::ChunkMap::default(),
             loader: Box::new(chunk::SampleChunkLoader::default()),
             saver: Box::new(chunk::SampleChunkSaver::default()),
-        }
+            cube_registry: builder.build(),
+        })
     }
 
     fn bake_hidden_face(&mut self, p_position: glam::IVec3) {
@@ -146,7 +152,23 @@ impl World {
         if !self.chunk_map.contains_key(&key) {
             self.load(key);
         }
-        let chunk = self.chunk_map.get_mut(&key).unwrap();
-        chunk.get_mut(code)
+        let slot = self.chunk_map.get_mut(&key).unwrap().get_mut(code);
+        slot
+    }
+
+    pub fn slot_cube(&mut self, p_position: glam::IVec3) -> (&mut slot::Slot, Option<cube::Cube>) {
+        let (code, remained) = chunk::ChunkMorton::consume(p_position);
+        let key = chunk::ChunkKey::from(remained);
+        if !self.chunk_map.contains_key(&key) {
+            self.load(key);
+        }
+        let cube = self
+            .chunk_map
+            .get(&key)
+            .map(|chunk| chunk.get(code))
+            .and_then(|slot| slot.cube_instance)
+            .and_then(|cube_instance| self.cube_registry.cubes().get(&cube_instance.id).cloned());
+        let slot = self.chunk_map.get_mut(&key).unwrap().get_mut(code);
+        (slot, cube)
     }
 }

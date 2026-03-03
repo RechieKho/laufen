@@ -3,7 +3,6 @@ use parry3d::query::PointQuery;
 use super::viewport;
 use super::viewport::quad;
 use super::world;
-use super::world::cube;
 use super::world::point_cluster;
 
 #[derive(Default)]
@@ -36,22 +35,20 @@ impl<const N: u32> Spectator<N> {
 
     fn append_quad_instances_from_slot(
         p_world: &mut world::World,
-        p_cube_registry: &cube::CubeRegistry,
         p_slot_position: glam::IVec3,
         r_instances: &mut Vec<quad::QuadInstance>,
     ) {
-        let slot = p_world.slot(p_slot_position);
+        let (slot, cube) = p_world.slot_cube(p_slot_position);
+
+        if cube.is_none() {
+            return;
+        }
 
         if slot.cube_instance.is_none() {
             return;
         }
 
         let cube_instance = slot.cube_instance.unwrap();
-        let cube_id = cube_instance.id;
-        let cube = p_cube_registry.cubes().get(&cube_id);
-        if cube.is_none() {
-            return;
-        }
         let cube = cube.unwrap();
         let cube_transformation = glam::Mat4::from(cube_instance.orientation);
 
@@ -143,7 +140,6 @@ impl<const N: u32> Spectator<N> {
     pub fn spectate(
         &mut self,
         p_world: &mut world::World,
-        p_cube_registry: &cube::CubeRegistry,
         p_camera_properties: &viewport::ViewportCameraProperties,
     ) -> Vec<quad::QuadInstance> {
         let lump_cone_height =
@@ -185,12 +181,7 @@ impl<const N: u32> Spectator<N> {
                 let mut instances = Vec::<quad::QuadInstance>::default();
                 for slot_point in Self::compute_slot_point_cluster_from_lump_position(lump_position)
                 {
-                    Self::append_quad_instances_from_slot(
-                        p_world,
-                        p_cube_registry,
-                        slot_point,
-                        &mut instances,
-                    );
+                    Self::append_quad_instances_from_slot(p_world, slot_point, &mut instances);
                 }
                 quad_instances.extend_from_slice(instances.as_slice());
                 self.lump.insert(lump_position, instances);

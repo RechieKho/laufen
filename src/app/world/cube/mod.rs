@@ -21,6 +21,7 @@ impl CubeResourceId {
     }
 }
 
+#[derive(Clone)]
 pub struct Cube {
     pub world_texture_atlas_index_top: u32,
     pub world_texture_atlas_index_bottom: u32,

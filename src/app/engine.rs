@@ -10,9 +10,6 @@ pub struct Engine {
     viewport: viewport::Viewport,
 
     #[getset(get = "pub")]
-    cube_registry: world::cube::CubeRegistry,
-
-    #[getset(get = "pub")]
     world: world::World,
 
     last_process_timestamp: std::time::Instant,
@@ -24,7 +21,6 @@ pub struct Engine {
 #[partially(derive(Default))]
 pub struct EngineBuilder {
     pub texture_atlas_cell_size: std::num::NonZeroU32,
-    pub cube_registry_builder: world::cube::CubeRegistryBuilder,
 }
 
 pub struct EngineBuilderParameters<'a> {
@@ -35,27 +31,23 @@ impl EngineBuilder {
     pub fn try_default() -> anyhow::Result<Self> {
         Ok(Self {
             texture_atlas_cell_size: std::num::NonZeroU32::new(24).unwrap(),
-            cube_registry_builder: world::cube::CubeRegistryBuilder::with_builtin()?,
         })
     }
 
     pub fn build<'a>(self, p_parameters: EngineBuilderParameters<'a>) -> anyhow::Result<Engine> {
-        let cube_registry = self.cube_registry_builder.build();
+        let world = world::World::try_sample()?;
 
         let atlas_builder = viewport::grid_texture_atlas::GridTextureAtlasBuilder {
             cell_size: self.texture_atlas_cell_size,
-            images: cube_registry.world_texture_images().as_slice(),
+            images: world.cube_registry().world_texture_images().as_slice(),
             texture_label: Some("Cube texture atlas"),
         };
 
         let viewport = viewport::Viewport::new(p_parameters.event_loop, atlas_builder)?;
 
-        let world = world::World::with_sample_loader_saver();
-
         Ok(Engine {
             viewport,
             world,
-            cube_registry,
             last_process_timestamp: std::time::Instant::now(),
             frame_per_second: 0,
             spectator: spectator::Spectator::default(),
@@ -65,11 +57,9 @@ impl EngineBuilder {
 
 impl Engine {
     pub fn render(&mut self) -> anyhow::Result<()> {
-        let quad_instances = self.spectator.spectate(
-            &mut self.world,
-            &self.cube_registry,
-            &self.viewport.camera_properties(),
-        );
+        let quad_instances = self
+            .spectator
+            .spectate(&mut self.world, &self.viewport.camera_properties());
 
         let frame_per_second_text = format!("FPS: {}", self.frame_per_second);
         let text = text::Text::new(frame_per_second_text.as_str())
