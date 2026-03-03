@@ -24,7 +24,7 @@ impl TextBrushContextBuilder {
         self,
         p_server: &rendering_server::RenderingServer,
     ) -> anyhow::Result<TextBrushContext<font_pack::FontArc>> {
-        let font_pack = font_pack::FontPack::try_load_default()?;
+        let font_pack = font_pack::FontPack::try_default()?;
         self.build(TextBrushContextBuilderParameters {
             server: p_server,
             font_pack,

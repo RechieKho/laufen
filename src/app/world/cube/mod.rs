@@ -66,7 +66,7 @@ pub struct CubeRegistryBuilder {
 }
 
 impl CubeRegistryBuilder {
-    pub fn with_builtin() -> anyhow::Result<Self> {
+    pub fn try_with_sample() -> anyhow::Result<Self> {
         let dirt_top_data = include_bytes!("./dirt1.png");
         let dirt_side_data = include_bytes!("./dirt2.png");
         let dirt_bottom_data = include_bytes!("./dirt3.png");

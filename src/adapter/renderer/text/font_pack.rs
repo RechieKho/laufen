@@ -9,7 +9,7 @@ pub struct FontPack<T: Font> {
 }
 
 impl FontPack<FontArc> {
-    pub fn try_load_default() -> anyhow::Result<Self> {
+    pub fn try_default() -> anyhow::Result<Self> {
         let normal = FontArc::try_from_slice(include_bytes!("./monocraft/Monocraft.ttf"))?;
         let bold = FontArc::try_from_slice(include_bytes!("./monocraft/Monocraft-Bold.ttf"))?;
         let italic = FontArc::try_from_slice(include_bytes!("./monocraft/Monocraft-Italic.ttf"))?;

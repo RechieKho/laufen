@@ -6,6 +6,33 @@ pub mod morton;
 pub mod point_cluster;
 pub mod slot;
 
+#[derive(partially::Partial)]
+#[partially(derive(Default))]
+pub struct WorldBuilder {
+    pub loader: Box<dyn chunk::ChunkLoader>,
+    pub saver: Box<dyn chunk::ChunkSaver>,
+    pub cube_registry_builder: cube::CubeRegistryBuilder,
+}
+
+impl WorldBuilder {
+    pub fn try_with_sample() -> anyhow::Result<Self> {
+        Ok(Self {
+            loader: Box::new(chunk::SampleChunkLoader::default()),
+            saver: Box::new(chunk::SampleChunkSaver::default()),
+            cube_registry_builder: cube::CubeRegistryBuilder::try_with_sample()?,
+        })
+    }
+
+    pub fn build(self) -> World {
+        World {
+            chunk_map: chunk::ChunkMap::default(),
+            loader: self.loader,
+            saver: self.saver,
+            cube_registry: self.cube_registry_builder.build(),
+        }
+    }
+}
+
 #[derive(getset::Getters)]
 pub struct World {
     chunk_map: chunk::ChunkMap,
@@ -17,16 +44,6 @@ pub struct World {
 }
 
 impl World {
-    pub fn try_sample() -> anyhow::Result<Self> {
-        let builder = cube::CubeRegistryBuilder::with_builtin()?;
-        Ok(Self {
-            chunk_map: chunk::ChunkMap::default(),
-            loader: Box::new(chunk::SampleChunkLoader::default()),
-            saver: Box::new(chunk::SampleChunkSaver::default()),
-            cube_registry: builder.build(),
-        })
-    }
-
     fn bake_hidden_face(&mut self, p_position: glam::IVec3) {
         self.slot(p_position).display_upward_quad = self
             .slot(p_position + glam::IVec3::Y)

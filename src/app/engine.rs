@@ -35,7 +35,7 @@ impl EngineBuilder {
     }
 
     pub fn build<'a>(self, p_parameters: EngineBuilderParameters<'a>) -> anyhow::Result<Engine> {
-        let world = world::World::try_sample()?;
+        let world = world::WorldBuilder::try_with_sample()?.build();
 
         let atlas_builder = viewport::grid_texture_atlas::GridTextureAtlasBuilder {
             cell_size: self.texture_atlas_cell_size,
