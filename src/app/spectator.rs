@@ -8,13 +8,13 @@ use super::world::point_cluster;
 type Lump = rapidhash::RapidHashMap<glam::IVec3, Vec<quad::QuadInstance>>;
 type SharedLump = std::sync::Arc<std::sync::Mutex<Lump>>;
 
-type LoadingLump = rapidhash::RapidHashSet<glam::IVec3>;
-type SharedLoadingLump = std::sync::Arc<std::sync::Mutex<LoadingLump>>;
+type LoadedLump = rapidhash::RapidHashSet<glam::IVec3>;
+type SharedLoadedLump = std::sync::Arc<std::sync::Mutex<LoadedLump>>;
 
 #[derive(Default)]
 pub struct Spectator<const N: u32> {
     lump: SharedLump,
-    loading_lump: SharedLoadingLump,
+    loaded_lump: SharedLoadedLump,
 }
 
 impl<const N: u32> Spectator<N> {
@@ -168,17 +168,16 @@ impl<const N: u32> Spectator<N> {
     fn load_to_lump_threaded(
         p_shared_world: world::SharedWorld,
         p_lump_position: glam::IVec3,
-        m_loading_lump: SharedLoadingLump,
+        m_loaded_lump: SharedLoadedLump,
         r_shared_lump: SharedLump,
     ) -> Option<tokio::task::JoinHandle<()>> {
-        if m_loading_lump.lock().unwrap().contains(&p_lump_position) {
+        if m_loaded_lump.lock().unwrap().contains(&p_lump_position) {
             return None;
         }
 
-        m_loading_lump.lock().unwrap().insert(p_lump_position);
+        m_loaded_lump.lock().unwrap().insert(p_lump_position);
         Some(tokio::task::spawn_blocking(move || {
             Self::load_to_lump(p_shared_world, p_lump_position, r_shared_lump);
-            m_loading_lump.lock().unwrap().remove(&p_lump_position);
         }))
     }
 
@@ -226,7 +225,7 @@ impl<const N: u32> Spectator<N> {
                 std::mem::drop(Self::load_to_lump_threaded(
                     p_shared_world.clone(),
                     lump_position,
-                    self.loading_lump.clone(),
+                    self.loaded_lump.clone(),
                     self.lump.clone(),
                 ));
             }
@@ -247,6 +246,10 @@ impl<const N: u32> Spectator<N> {
         self.lump.lock().unwrap().retain(|p_key, _| {
             let distance = lump_position.chebyshev_distance(*p_key);
             distance < max_chebyshev_lump_distance
-        })
+        });
+        self.loaded_lump.lock().unwrap().retain(|p_key| {
+            let distance = lump_position.chebyshev_distance(*p_key);
+            distance < max_chebyshev_lump_distance
+        });
     }
 }
