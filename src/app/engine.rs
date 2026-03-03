@@ -10,7 +10,7 @@ pub struct Engine {
     viewport: viewport::Viewport,
 
     #[getset(get = "pub")]
-    world: world::World,
+    shared_world: world::SharedWorld,
 
     last_process_timestamp: std::time::Instant,
     frame_per_second: u32,
@@ -44,10 +44,11 @@ impl EngineBuilder {
         };
 
         let viewport = viewport::Viewport::new(p_parameters.event_loop, atlas_builder)?;
+        let shared_world = world::SharedWorld::from(world);
 
         Ok(Engine {
             viewport,
-            world,
+            shared_world,
             last_process_timestamp: std::time::Instant::now(),
             frame_per_second: 0,
             spectator: spectator::Spectator::default(),
@@ -57,9 +58,10 @@ impl EngineBuilder {
 
 impl Engine {
     pub fn render(&mut self) -> anyhow::Result<()> {
-        let quad_instances = self
-            .spectator
-            .spectate(&mut self.world, &self.viewport.camera_properties());
+        let quad_instances = self.spectator.spectate(
+            self.shared_world.clone(),
+            &self.viewport.camera_properties(),
+        );
 
         let frame_per_second_text = format!("FPS: {}", self.frame_per_second);
         let text = text::Text::new(frame_per_second_text.as_str())
@@ -103,7 +105,10 @@ impl Engine {
 
         self.spectator
             .purge_cache_beyond(purge_origin, purge_distance);
-        self.world.purge_beyond(purge_origin, purge_distance);
+        self.shared_world
+            .lock()
+            .unwrap()
+            .purge_beyond(purge_origin, purge_distance);
 
         const LINEAR_SPEED: f32 = 0.2;
         const ANGULAR_SPEED: f32 = std::f32::consts::PI / 100.0;

@@ -5,9 +5,16 @@ use super::viewport::quad;
 use super::world;
 use super::world::point_cluster;
 
+type Lump = rapidhash::RapidHashMap<glam::IVec3, Vec<quad::QuadInstance>>;
+type SharedLump = std::sync::Arc<std::sync::Mutex<Lump>>;
+
+type LoadingLump = rapidhash::RapidHashSet<glam::IVec3>;
+type SharedLoadingLump = std::sync::Arc<std::sync::Mutex<LoadingLump>>;
+
 #[derive(Default)]
 pub struct Spectator<const N: u32> {
-    lump: rapidhash::RapidHashMap<glam::IVec3, Vec<quad::QuadInstance>>,
+    lump: SharedLump,
+    loading_lump: SharedLoadingLump,
 }
 
 impl<const N: u32> Spectator<N> {
@@ -33,24 +40,25 @@ impl<const N: u32> Spectator<N> {
         }
     }
 
-    fn append_quad_instances_from_slot(
-        p_world: &mut world::World,
+    fn create_quad_instances_from_slot(
+        p_shared_world: world::SharedWorld,
         p_slot_position: glam::IVec3,
-        r_instances: &mut Vec<quad::QuadInstance>,
-    ) {
-        let (slot, cube) = p_world.slot_cube(p_slot_position);
+    ) -> Vec<quad::QuadInstance> {
+        let mut world = p_shared_world.lock().unwrap();
+        let (slot, cube) = world.slot_cube(p_slot_position);
 
         if cube.is_none() {
-            return;
+            return Default::default();
         }
 
         if slot.cube_instance.is_none() {
-            return;
+            return Default::default();
         }
 
         let cube_instance = slot.cube_instance.unwrap();
         let cube = cube.unwrap();
         let cube_transformation = glam::Mat4::from(cube_instance.orientation);
+        let mut instances = Vec::<quad::QuadInstance>::default();
 
         if slot.display_back_quad {
             let back_quad = quad::QuadInstance::new(
@@ -63,7 +71,7 @@ impl<const N: u32> Spectator<N> {
                     * quad::QuadRenderPipelineContext::QUAD_BACKWARD_MATRIX,
                 cube.world_texture_atlas_index_back,
             );
-            r_instances.push(back_quad);
+            instances.push(back_quad);
         }
 
         if slot.display_front_quad {
@@ -77,7 +85,7 @@ impl<const N: u32> Spectator<N> {
                     * quad::QuadRenderPipelineContext::QUAD_FORWARD_MATRIX,
                 cube.world_texture_atlas_index_front,
             );
-            r_instances.push(front_quad);
+            instances.push(front_quad);
         }
 
         if slot.display_upward_quad {
@@ -91,7 +99,7 @@ impl<const N: u32> Spectator<N> {
                     * quad::QuadRenderPipelineContext::QUAD_UPWARD_MATRIX,
                 cube.world_texture_atlas_index_top,
             );
-            r_instances.push(up_quad);
+            instances.push(up_quad);
         }
 
         if slot.display_downward_quad {
@@ -105,7 +113,7 @@ impl<const N: u32> Spectator<N> {
                     * quad::QuadRenderPipelineContext::QUAD_DOWNWARD_MATRIX,
                 cube.world_texture_atlas_index_bottom,
             );
-            r_instances.push(down_quad);
+            instances.push(down_quad);
         }
 
         if slot.display_left_quad {
@@ -119,7 +127,7 @@ impl<const N: u32> Spectator<N> {
                     * quad::QuadRenderPipelineContext::QUAD_LEFT_MATRIX,
                 cube.world_texture_atlas_index_left,
             );
-            r_instances.push(left_quad);
+            instances.push(left_quad);
         }
 
         if slot.display_right_quad {
@@ -133,13 +141,50 @@ impl<const N: u32> Spectator<N> {
                     * quad::QuadRenderPipelineContext::QUAD_RIGHT_MATRIX,
                 cube.world_texture_atlas_index_right,
             );
-            r_instances.push(right_quad);
+            instances.push(right_quad);
         }
+
+        instances
+    }
+
+    fn load_to_lump(
+        p_shared_world: world::SharedWorld,
+        p_lump_position: glam::IVec3,
+        r_shared_lump: SharedLump,
+    ) {
+        let mut instances = Vec::<quad::QuadInstance>::default();
+        for slot_point in Self::compute_slot_point_cluster_from_lump_position(p_lump_position) {
+            instances.append(&mut Self::create_quad_instances_from_slot(
+                p_shared_world.clone(),
+                slot_point,
+            ));
+        }
+        r_shared_lump
+            .lock()
+            .unwrap()
+            .insert(p_lump_position, instances);
+    }
+
+    fn load_to_lump_threaded(
+        p_shared_world: world::SharedWorld,
+        p_lump_position: glam::IVec3,
+        m_loading_lump: SharedLoadingLump,
+        r_shared_lump: SharedLump,
+    ) -> Option<tokio::task::JoinHandle<()>> {
+        if m_loading_lump.lock().unwrap().contains(&p_lump_position) {
+            return None;
+        }
+
+        m_loading_lump.lock().unwrap().insert(p_lump_position);
+        Some(tokio::task::spawn_blocking(move || {
+            Self::load_to_lump(p_shared_world, p_lump_position, r_shared_lump);
+            m_loading_lump.lock().unwrap().remove(&p_lump_position);
+        }))
     }
 
     pub fn spectate(
         &mut self,
-        p_world: &mut world::World,
+        p_shared_world: world::SharedWorld,
         p_camera_properties: &viewport::ViewportCameraProperties,
     ) -> Vec<quad::QuadInstance> {
         let lump_cone_height =
@@ -175,16 +220,15 @@ impl<const N: u32> Spectator<N> {
                 continue;
             }
 
-            if let Some(instances) = self.lump.get(&lump_position) {
+            if let Some(instances) = self.lump.lock().unwrap().get(&lump_position) {
                 quad_instances.extend_from_slice(instances.as_slice());
             } else {
-                let mut instances = Vec::<quad::QuadInstance>::default();
-                for slot_point in Self::compute_slot_point_cluster_from_lump_position(lump_position)
-                {
-                    Self::append_quad_instances_from_slot(p_world, slot_point, &mut instances);
-                }
-                quad_instances.extend_from_slice(instances.as_slice());
-                self.lump.insert(lump_position, instances);
+                std::mem::drop(Self::load_to_lump_threaded(
+                    p_shared_world.clone(),
+                    lump_position,
+                    self.loading_lump.clone(),
+                    self.lump.clone(),
+                ));
             }
         }
 
@@ -200,7 +244,7 @@ impl<const N: u32> Spectator<N> {
         let max_chebyshev_lump_distance =
             p_max_chebyshev_slot_distance.div_euclid(Self::LUMP_SIZE as _);
 
-        self.lump.retain(|p_key, _| {
+        self.lump.lock().unwrap().retain(|p_key, _| {
             let distance = lump_position.chebyshev_distance(*p_key);
             distance < max_chebyshev_lump_distance
         })

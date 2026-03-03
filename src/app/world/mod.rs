@@ -33,6 +33,14 @@ impl WorldBuilder {
     }
 }
 
+pub type SharedWorld = std::sync::Arc<std::sync::Mutex<World>>;
+
+impl From<World> for SharedWorld {
+    fn from(p_value: World) -> Self {
+        std::sync::Arc::new(std::sync::Mutex::new(p_value))
+    }
+}
+
 #[derive(getset::Getters)]
 pub struct World {
     chunk_map: chunk::ChunkMap,
@@ -42,6 +50,10 @@ pub struct World {
     #[getset(get = "pub")]
     cube_registry: cube::CubeRegistry,
 }
+
+unsafe impl Send for World {}
+
+unsafe impl Sync for World {}
 
 impl World {
     fn bake_hidden_face(&mut self, p_position: glam::IVec3) {

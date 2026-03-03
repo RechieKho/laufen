@@ -1,6 +1,7 @@
 pub mod adapter;
 pub mod app;
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     app::App::run()
 }
