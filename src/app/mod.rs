@@ -1,8 +1,7 @@
+pub mod arch;
 pub mod biosphere;
 pub mod engine;
 pub mod geosphere;
-pub mod provider;
-pub mod spectator;
 pub mod viewport;
 
 #[derive(Default)]

@@ -122,23 +122,23 @@ impl ChunkLoader for SampleChunkLoader {
     fn load_chunk(&mut self, _p_key: ChunkKey) -> anyhow::Result<ChunkLoadData> {
         let mut chunk = Chunk::default();
         *chunk.get_from_position_mut(glam::IVec3::ZERO) = slot::Slot {
-            cube_instance: Some(cube::CubeInstance::try_default()?),
+            cube_instance: Some(cube::CubeInstance::default()),
             ..Default::default()
         };
         *chunk.get_from_position_mut(glam::IVec3::new(1, 0, 1)) = slot::Slot {
-            cube_instance: Some(cube::CubeInstance::try_default()?),
+            cube_instance: Some(cube::CubeInstance::default()),
             ..Default::default()
         };
         *chunk.get_from_position_mut(glam::IVec3::new(1, 0, 0)) = slot::Slot {
-            cube_instance: Some(cube::CubeInstance::try_default()?),
+            cube_instance: Some(cube::CubeInstance::default()),
             ..Default::default()
         };
         *chunk.get_from_position_mut(glam::IVec3::new(0, 0, 1)) = slot::Slot {
-            cube_instance: Some(cube::CubeInstance::try_default()?),
+            cube_instance: Some(cube::CubeInstance::default()),
             ..Default::default()
         };
         *chunk.get_from_position_mut(glam::IVec3::new(2, 0, 1)) = slot::Slot {
-            cube_instance: Some(cube::CubeInstance::try_default()?),
+            cube_instance: Some(cube::CubeInstance::default()),
             ..Default::default()
         };
         Ok(ChunkLoadData {

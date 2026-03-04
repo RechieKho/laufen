@@ -1,9 +1,8 @@
+use crate::app::viewport;
+use crate::app::viewport::quad;
 use parry3d::query::PointQuery;
 
-use super::geosphere;
-use super::geosphere::point_cluster;
-use super::viewport;
-use super::viewport::quad;
+use super::point_cluster;
 
 type Lump = rapidhash::RapidHashMap<glam::IVec3, Vec<quad::QuadInstance>>;
 type SharedLump = std::sync::Arc<std::sync::Mutex<Lump>>;
@@ -19,6 +18,7 @@ pub struct Spectator {
 
 impl Spectator {
     pub const LUMP_SIZE: u32 = 8;
+    pub const MAX_LOAD_PER_SPECTATE: u32 = 64;
 
     #[inline]
     fn convert_slot_position_to_lump_position(p_slot_position: glam::IVec3) -> glam::IVec3 {
@@ -41,7 +41,7 @@ impl Spectator {
     }
 
     fn create_quad_instances_from_slot(
-        p_shared_geosphere: geosphere::SharedGeosphere,
+        p_shared_geosphere: super::SharedGeosphere,
         p_slot_position: glam::IVec3,
     ) -> Vec<quad::QuadInstance> {
         let mut geosphere = p_shared_geosphere.lock().unwrap();
@@ -148,7 +148,7 @@ impl Spectator {
     }
 
     fn load_to_lump(
-        p_shared_geosphere: geosphere::SharedGeosphere,
+        p_shared_geosphere: super::SharedGeosphere,
         p_lump_position: glam::IVec3,
         r_shared_lump: SharedLump,
     ) {
@@ -166,7 +166,7 @@ impl Spectator {
     }
 
     fn load_to_lump_threaded(
-        p_shared_geosphere: geosphere::SharedGeosphere,
+        p_shared_geosphere: super::SharedGeosphere,
         p_lump_position: glam::IVec3,
         m_loading_lump: SharedLoadingLump,
         r_shared_lump: SharedLump,
@@ -184,7 +184,7 @@ impl Spectator {
 
     pub fn spectate(
         &mut self,
-        p_shared_geosphere: geosphere::SharedGeosphere,
+        p_shared_geosphere: super::SharedGeosphere,
         p_camera_properties: &viewport::ViewportCameraProperties,
     ) -> Vec<quad::QuadInstance> {
         let lump_cone_height =
@@ -207,6 +207,7 @@ impl Spectator {
         );
 
         let mut quad_instances = Vec::<quad::QuadInstance>::default();
+        let mut load_count = 0u32;
 
         for lump_position in point_cluster::PointCluster::from(lump_cone.aabb(&pose)).into_iter() {
             if !lump_cone.contains_point(
@@ -223,12 +224,16 @@ impl Spectator {
             if let Some(instances) = self.lump.lock().unwrap().get(&lump_position) {
                 quad_instances.extend_from_slice(instances.as_slice());
             } else {
+                if load_count > Self::MAX_LOAD_PER_SPECTATE {
+                    continue;
+                }
                 std::mem::drop(Self::load_to_lump_threaded(
                     p_shared_geosphere.clone(),
                     lump_position,
                     self.loading_lump.clone(),
                     self.lump.clone(),
                 ));
+                load_count += 1;
             }
         }
 

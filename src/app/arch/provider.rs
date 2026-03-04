@@ -1,7 +1,8 @@
-use super::biosphere;
-use super::geosphere;
-use crate::adapter::net;
 use shipyard::IntoIter;
+
+use crate::adapter::net;
+use crate::app::biosphere;
+use crate::app::geosphere;
 
 pub struct Provider {
     server_context: net::server::ServerContext,
@@ -62,8 +63,7 @@ impl Provider {
             }
         }
 
-        // TODO: Receive request to get slot data based on FOV and depth.
-        // This implies the need to create a dedicated channels.
+        // TODO: Handle Relay requests and responses.
 
         Ok(())
     }

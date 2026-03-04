@@ -17,20 +17,21 @@ partially = { version = "0.2", features = [ "derive" ] }
 renet = "2.0.0"
 renet_netcode = "2.0.0"
 rhai = "1.24.0"
-image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "serde"] }
 shipyard = "0.11.0"
 getset = "0.1.6"
 winit_input_helper = "0.17.0"
 num-traits = "0.2.19"
-stringid = "0.1.1"
 cityhasher = "0.1.0"
 itertools = "0.14.0"
 wgpu_text = "28.0.1"
 gfx_glyph = "0.17.1"
-glam = { version = "0.30.10" , features = [ "bytemuck" ] }
+glam = { version = "0.30.10" , features = [ "bytemuck", "serde" ] }
 parry3d = { version = "0.26.0", features = [ "bytemuck-serialize" ] }
 rapidhash = "4.4.1"
 tokio = { version = "1.49.0", features = [ "full" ] }
+serde = { version = "1.0.228", features = [ "derive" ] }
+ustr = { version = "1.1.0", features = [ "serde" ] }
 
 [profile.dev]
 opt-level = 2

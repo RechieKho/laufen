@@ -1,6 +1,6 @@
 use super::cube;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Slot {
     pub cube_instance: Option<cube::CubeInstance>,
 

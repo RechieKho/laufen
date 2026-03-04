@@ -1,27 +1,9 @@
-use std::str::FromStr;
-use stringid::create_hash_map;
-use stringid::macros::strlookup_hashmap;
-use stringid::macros::StringIdImpl;
-use stringid::BufferStrStore;
-use stringid::StringId;
+use crate::adapter::renderer;
+use crate::app::viewport;
 
-#[strlookup_hashmap(key = u64, store = BufferStrStore, size = 128)]
-struct CubeResourceIdLookUp;
-#[derive(Debug, Clone, Copy, StringIdImpl)]
-pub struct CubeResourceId(StringId<u64, CubeResourceIdLookUp>);
+pub type CubeResourceId = ustr::Ustr;
 
-impl CubeResourceId {
-    pub fn new(p_name: &str) -> anyhow::Result<Self> {
-        CubeResourceId::from_str(p_name)
-            .map_err(|_err| anyhow::anyhow!("Unable to create cube resource id."))
-    }
-
-    pub fn try_default() -> anyhow::Result<Self> {
-        Self::new("default")
-    }
-}
-
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct Cube {
     pub geosphere_texture_atlas_index_top: u32,
     pub geosphere_texture_atlas_index_bottom: u32,
@@ -31,15 +13,16 @@ pub struct Cube {
     pub geosphere_texture_atlas_index_back: u32,
 }
 
-type CubeMap = std::collections::BTreeMap<CubeResourceId, Cube>;
+type CubeMap = rapidhash::RapidHashMap<CubeResourceId, Cube>;
 
-#[derive(Default, getset::Getters)]
+#[derive(Default, getset::Getters, serde::Serialize, serde::Deserialize, Clone)]
 pub struct CubeRegistry {
     #[getset(get = "pub")]
     cubes: CubeMap,
 
     #[getset(get = "pub")]
-    geosphere_texture_images: Vec<image::DynamicImage>,
+    geosphere_serializable_texture_image:
+        Vec<viewport::serializable_texture_image::SerializableTextureImage>,
 }
 
 impl CubeRegistry {
@@ -52,12 +35,12 @@ impl CubeRegistry {
 #[partially(derive(Default))]
 pub struct CubeBuilder {
     pub id: CubeResourceId,
-    pub geosphere_texture_image_top: image::DynamicImage,
-    pub geosphere_texture_image_bottom: image::DynamicImage,
-    pub geosphere_texture_image_left: image::DynamicImage,
-    pub geosphere_texture_image_right: image::DynamicImage,
-    pub geosphere_texture_image_front: image::DynamicImage,
-    pub geosphere_texture_image_back: image::DynamicImage,
+    pub geosphere_texture_image_top: renderer::texture::TextureImage,
+    pub geosphere_texture_image_bottom: renderer::texture::TextureImage,
+    pub geosphere_texture_image_left: renderer::texture::TextureImage,
+    pub geosphere_texture_image_right: renderer::texture::TextureImage,
+    pub geosphere_texture_image_front: renderer::texture::TextureImage,
+    pub geosphere_texture_image_back: renderer::texture::TextureImage,
 }
 
 #[derive(Default)]
@@ -71,13 +54,13 @@ impl CubeRegistryBuilder {
         let dirt_side_data = include_bytes!("./dirt2.png");
         let dirt_bottom_data = include_bytes!("./dirt3.png");
 
-        let dirt_top = image::load_from_memory(dirt_top_data)?;
-        let dirt_side = image::load_from_memory(dirt_side_data)?;
-        let dirt_bottom = image::load_from_memory(dirt_bottom_data)?;
+        let dirt_top = image::load_from_memory(dirt_top_data)?.to_rgba8();
+        let dirt_side = image::load_from_memory(dirt_side_data)?.to_rgba8();
+        let dirt_bottom = image::load_from_memory(dirt_bottom_data)?.to_rgba8();
 
         let mut builder = Self::default();
         builder.cube_builders.push(CubeBuilder {
-            id: CubeResourceId::try_default()?,
+            id: CubeResourceId::default(),
             geosphere_texture_image_top: dirt_top,
             geosphere_texture_image_left: dirt_side.clone(),
             geosphere_texture_image_right: dirt_side.clone(),
@@ -90,22 +73,23 @@ impl CubeRegistryBuilder {
 
     pub fn build(self) -> CubeRegistry {
         let mut registry = CubeRegistry::default();
-        let mut images = Vec::<image::DynamicImage>::default();
+        let mut images =
+            Vec::<viewport::serializable_texture_image::SerializableTextureImage>::default();
 
         for builder in self.cube_builders {
             let id = builder.id;
             let geosphere_texture_atlas_index_top = images.len() as u32;
-            images.push(builder.geosphere_texture_image_top);
+            images.push(builder.geosphere_texture_image_top.into());
             let geosphere_texture_atlas_index_bottom = images.len() as u32;
-            images.push(builder.geosphere_texture_image_bottom);
+            images.push(builder.geosphere_texture_image_bottom.into());
             let geosphere_texture_atlas_index_left = images.len() as u32;
-            images.push(builder.geosphere_texture_image_left);
+            images.push(builder.geosphere_texture_image_left.into());
             let geosphere_texture_atlas_index_right = images.len() as u32;
-            images.push(builder.geosphere_texture_image_right);
+            images.push(builder.geosphere_texture_image_right.into());
             let geosphere_texture_atlas_index_front = images.len() as u32;
-            images.push(builder.geosphere_texture_image_front);
+            images.push(builder.geosphere_texture_image_front.into());
             let geosphere_texture_atlas_index_back = images.len() as u32;
-            images.push(builder.geosphere_texture_image_back);
+            images.push(builder.geosphere_texture_image_back.into());
 
             let cube = Cube {
                 geosphere_texture_atlas_index_top,
@@ -118,12 +102,12 @@ impl CubeRegistryBuilder {
             registry.register(id, cube);
         }
 
-        registry.geosphere_texture_images = images;
+        registry.geosphere_serializable_texture_image = images;
         registry
     }
 }
 
-#[derive(Default, Clone, Copy, Debug)]
+#[derive(Default, Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
 pub enum CubeInstanceOrientation {
     #[default]
     FORWARD,
@@ -171,17 +155,8 @@ impl From<CubeInstanceOrientation> for glam::Mat4 {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Default, Debug, serde::Serialize, serde::Deserialize)]
 pub struct CubeInstance {
     pub id: CubeResourceId,
     pub orientation: CubeInstanceOrientation,
-}
-
-impl CubeInstance {
-    pub fn try_default() -> anyhow::Result<Self> {
-        Ok(Self {
-            id: CubeResourceId::try_default()?,
-            orientation: CubeInstanceOrientation::default(),
-        })
-    }
 }

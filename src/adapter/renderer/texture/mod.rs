@@ -1,8 +1,10 @@
-use image::GenericImageView;
-
 use super::bind_group;
 use super::bind_group::ToBindGroupContext;
 use super::rendering_server;
+
+pub type TextureImageContainer = Vec<u8>;
+pub type TextureImagePixel = image::Rgba<u8>;
+pub type TextureImage = image::ImageBuffer<TextureImagePixel, TextureImageContainer>;
 
 #[derive(Clone, partially::Partial)]
 #[partially(derive(Default))]
@@ -61,7 +63,7 @@ pub struct TextureContextBuilderParameters<'a> {
 
 pub struct TextureContextBuilderParametersFromImage<'a> {
     pub server: &'a rendering_server::RenderingServer,
-    pub image: &'a image::DynamicImage,
+    pub image: &'a TextureImage,
 }
 
 pub struct TextureContextBuilderParametersFromImageBytes<'a> {
@@ -128,7 +130,7 @@ impl<'a> TextureContextBuilder<'a> {
         self,
         p_parameters: TextureContextBuilderParametersFromImageBytes<'a>,
     ) -> anyhow::Result<TextureContext> {
-        let image = image::load_from_memory(p_parameters.image_bytes)?;
+        let image = image::load_from_memory(p_parameters.image_bytes)?.to_rgba8();
         Ok(
             self.build_from_image(TextureContextBuilderParametersFromImage {
                 server: p_parameters.server,
@@ -274,7 +276,7 @@ impl TextureContext {
     pub fn update_from_image(
         &self,
         p_server: &rendering_server::RenderingServer,
-        p_image: &image::DynamicImage,
+        p_image: &image::RgbaImage,
     ) -> anyhow::Result<()> {
         let texture_size = self.texture.size();
         let image_size = p_image.dimensions();
@@ -285,8 +287,6 @@ impl TextureContext {
             ));
         }
 
-        let rgba = p_image.to_rgba8();
-
         p_server.queue().write_texture(
             rendering_server::TexelCopyTextureInfo {
                 aspect: rendering_server::TextureAspect::All,
@@ -294,7 +294,7 @@ impl TextureContext {
                 mip_level: 0,
                 origin: rendering_server::Origin3d::ZERO,
             },
-            &rgba,
+            p_image,
             rendering_server::TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(4 * image_size.0),

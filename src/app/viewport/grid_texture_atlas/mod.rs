@@ -1,5 +1,6 @@
 use repr_trait::C;
 
+use crate::adapter::renderer;
 use crate::adapter::renderer::bind_group;
 use crate::adapter::renderer::bind_group::ToBindGroupContext;
 use crate::adapter::renderer::buffer;
@@ -54,7 +55,7 @@ pub struct GridTextureAtlas {
 #[partially(derive(Default))]
 pub struct GridTextureAtlasBuilder<'a> {
     pub cell_size: std::num::NonZeroU32,
-    pub images: &'a [image::DynamicImage],
+    pub images: &'a [texture::TextureImage],
     pub texture_label: Option<&'a str>,
 }
 
@@ -100,11 +101,8 @@ impl<'a> GridTextureAtlasBuilder<'a> {
                 return Err(anyhow::anyhow!("Texture size of target grid teture atlas does not match with the intended size."));
             }
 
-            let image = image::DynamicImage::new(
-                self.cell_size.get(),
-                self.cell_size.get(),
-                image::ColorType::Rgb8,
-            );
+            let image =
+                renderer::texture::TextureImage::new(self.cell_size.get(), self.cell_size.get());
             return p_target
                 .bounded_texture_context
                 .texture_context()
@@ -131,11 +129,11 @@ impl<'a> GridTextureAtlasBuilder<'a> {
             ));
         }
 
-        let mut image =
-            image::DynamicImage::new(image_side_length, image_side_length, image::ColorType::Rgb8);
+        let mut image = renderer::texture::TextureImage::new(image_side_length, image_side_length);
 
         for (i, input_image) in self.images.iter().enumerate() {
-            let resized = input_image.resize_exact(
+            let resized = image::imageops::resize(
+                input_image,
                 self.cell_size.get(),
                 self.cell_size.get(),
                 image::imageops::FilterType::Nearest,
@@ -161,11 +159,8 @@ impl<'a> GridTextureAtlasBuilder<'a> {
         p_parameters: GridTextureAtlasBuilderParameters<'a>,
     ) -> anyhow::Result<GridTextureAtlas> {
         if self.images.is_empty() {
-            let image = image::DynamicImage::new(
-                self.cell_size.get(),
-                self.cell_size.get(),
-                image::ColorType::Rgb8,
-            );
+            let image =
+                renderer::texture::TextureImage::new(self.cell_size.get(), self.cell_size.get());
             let texture_context_builder = texture::TextureContextBuilder {
                 label: self.texture_label,
                 ..Default::default()
@@ -199,14 +194,14 @@ impl<'a> GridTextureAtlasBuilder<'a> {
             image_count_per_axis += 1;
         }
 
-        let mut image = image::DynamicImage::new(
+        let mut image = renderer::texture::TextureImage::new(
             image_count_per_axis * self.cell_size.get(),
             image_count_per_axis * self.cell_size.get(),
-            image::ColorType::Rgb8,
         );
 
         for (i, input_image) in self.images.iter().enumerate() {
-            let resized = input_image.resize_exact(
+            let resized = image::imageops::resize(
+                input_image,
                 self.cell_size.get(),
                 self.cell_size.get(),
                 image::imageops::FilterType::Nearest,

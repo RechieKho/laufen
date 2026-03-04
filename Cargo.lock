@@ -953,6 +953,7 @@ dependencies = [
  "approx",
  "bytemuck",
  "libm",
+ "serde_core",
 ]
 
 [[package]]
@@ -1144,6 +1145,7 @@ dependencies = [
  "moxcms",
  "num-traits",
  "png",
+ "serde",
  "zune-core",
  "zune-jpeg",
 ]
@@ -1288,14 +1290,21 @@ dependencies = [
  "renet_netcode",
  "repr-trait",
  "rhai",
+ "serde",
  "shipyard",
- "stringid",
  "tokio",
+ "ustr",
  "wgpu",
  "wgpu_text",
  "winit",
  "winit_input_helper",
 ]
+
+[[package]]
+name = "lazy_static"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
 name = "libc"
@@ -2633,28 +2642,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6637bab7722d379c8b41ba849228d680cc12d0a45ba1fa2b48f2a30577a06731"
 
 [[package]]
-name = "stringid"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86cafe79cff9d57933c3acc6864491ab8ee8cf81eba10cad0442555744a746d0"
-dependencies = [
- "cityhasher",
- "log",
- "stringid_macros",
-]
-
-[[package]]
-name = "stringid_macros"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "483b9ff7f0ac057df48ade567451160774444c402e62474671b158761ffd9361"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.114",
-]
-
-[[package]]
 name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2898,6 +2885,19 @@ checksum = "fc1de2c688dc15305988b563c3854064043356019f97a4b46276fe734c4f07ea"
 dependencies = [
  "crypto-common",
  "subtle",
+]
+
+[[package]]
+name = "ustr"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18b19e258aa08450f93369cf56dd78063586adf19e92a75b338a800f799a0208"
+dependencies = [
+ "ahash",
+ "byteorder",
+ "lazy_static",
+ "parking_lot",
+ "serde",
 ]
 
 [[package]]

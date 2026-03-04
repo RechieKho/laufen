@@ -1,10 +1,11 @@
 use crate::adapter::renderer::rendering_server::{SubmitToQueue, SubmitToRenderPass};
 use crate::adapter::renderer::*;
-use crate::app::viewport::grid_texture_atlas::GridTextureAtlasBuilderParameters;
+use grid_texture_atlas::GridTextureAtlasBuilderParameters;
 
 pub mod camera;
 pub mod grid_texture_atlas;
 pub mod quad;
+pub mod serializable_texture_image;
 
 #[derive(getset::Getters, getset::MutGetters)]
 pub struct Viewport {

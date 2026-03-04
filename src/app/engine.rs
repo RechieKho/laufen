@@ -1,7 +1,7 @@
+use crate::adapter::renderer;
 use crate::adapter::renderer::*;
 
 use super::geosphere;
-use super::spectator;
 use super::viewport;
 
 #[derive(getset::Getters, getset::MutGetters)]
@@ -14,7 +14,7 @@ pub struct Engine {
 
     last_process_timestamp: std::time::Instant,
     frame_per_second: u32,
-    spectator: spectator::Spectator,
+    spectator: geosphere::spectator::Spectator,
 }
 
 #[derive(partially::Partial)]
@@ -36,13 +36,16 @@ impl EngineBuilder {
 
     pub fn build<'a>(self, p_parameters: EngineBuilderParameters<'a>) -> anyhow::Result<Engine> {
         let geosphere = geosphere::GeosphereBuilder::try_with_sample()?.build();
+        let geosphere_texture_images = geosphere
+            .cube_registry()
+            .geosphere_serializable_texture_image()
+            .iter()
+            .map(|p_image| p_image.clone().to_texture_image().unwrap())
+            .collect::<Vec<renderer::texture::TextureImage>>();
 
         let atlas_builder = viewport::grid_texture_atlas::GridTextureAtlasBuilder {
             cell_size: self.texture_atlas_cell_size,
-            images: geosphere
-                .cube_registry()
-                .geosphere_texture_images()
-                .as_slice(),
+            images: geosphere_texture_images.as_slice(),
             texture_label: Some("Cube texture atlas"),
         };
 
@@ -54,7 +57,7 @@ impl EngineBuilder {
             shared_geosphere,
             last_process_timestamp: std::time::Instant::now(),
             frame_per_second: 0,
-            spectator: spectator::Spectator::default(),
+            spectator: geosphere::spectator::Spectator::default(),
         })
     }
 }
