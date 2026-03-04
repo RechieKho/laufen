@@ -14,7 +14,7 @@ pub struct Engine {
 
     last_process_timestamp: std::time::Instant,
     frame_per_second: u32,
-    spectator: spectator::Spectator<4>,
+    spectator: spectator::Spectator,
 }
 
 #[derive(partially::Partial)]

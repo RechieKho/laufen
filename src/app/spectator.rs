@@ -12,13 +12,13 @@ type LoadingLump = rapidhash::RapidHashSet<glam::IVec3>;
 type SharedLoadingLump = std::sync::Arc<std::sync::Mutex<LoadingLump>>;
 
 #[derive(Default)]
-pub struct Spectator<const N: u32> {
+pub struct Spectator {
     lump: SharedLump,
     loading_lump: SharedLoadingLump,
 }
 
-impl<const N: u32> Spectator<N> {
-    pub const LUMP_SIZE: u32 = N;
+impl Spectator {
+    pub const LUMP_SIZE: u32 = 8;
 
     #[inline]
     fn convert_slot_position_to_lump_position(p_slot_position: glam::IVec3) -> glam::IVec3 {
@@ -189,9 +189,9 @@ impl<const N: u32> Spectator<N> {
     ) -> Vec<quad::QuadInstance> {
         let lump_cone_height =
             (p_camera_properties.z_far - p_camera_properties.z_near).abs() / Self::LUMP_SIZE as f32;
-        let lump_cone_radius = lump_cone_height
-            * (p_camera_properties.fov * Self::LUMP_SIZE as f32 / 4.0).tan()
-            / Self::LUMP_SIZE as f32;
+        let lump_cone_radius = (lump_cone_height * p_camera_properties.fov.tan()
+            / Self::LUMP_SIZE as f32)
+            + Self::LUMP_SIZE as f32;
         let lump_cone = parry3d::shape::Cone::new(lump_cone_height / 2.0, lump_cone_radius);
 
         let pose = parry3d::math::Pose3::from_mat4(
