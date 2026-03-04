@@ -1,8 +1,8 @@
 use crate::adapter::renderer::*;
 
+use super::geosphere;
 use super::spectator;
 use super::viewport;
-use super::world;
 
 #[derive(getset::Getters, getset::MutGetters)]
 pub struct Engine {
@@ -10,7 +10,7 @@ pub struct Engine {
     viewport: viewport::Viewport,
 
     #[getset(get = "pub")]
-    shared_world: world::SharedWorld,
+    shared_geosphere: geosphere::SharedGeosphere,
 
     last_process_timestamp: std::time::Instant,
     frame_per_second: u32,
@@ -35,20 +35,23 @@ impl EngineBuilder {
     }
 
     pub fn build<'a>(self, p_parameters: EngineBuilderParameters<'a>) -> anyhow::Result<Engine> {
-        let world = world::WorldBuilder::try_with_sample()?.build();
+        let geosphere = geosphere::GeosphereBuilder::try_with_sample()?.build();
 
         let atlas_builder = viewport::grid_texture_atlas::GridTextureAtlasBuilder {
             cell_size: self.texture_atlas_cell_size,
-            images: world.cube_registry().world_texture_images().as_slice(),
+            images: geosphere
+                .cube_registry()
+                .geosphere_texture_images()
+                .as_slice(),
             texture_label: Some("Cube texture atlas"),
         };
 
         let viewport = viewport::Viewport::new(p_parameters.event_loop, atlas_builder)?;
-        let shared_world = world::SharedWorld::from(world);
+        let shared_geosphere = geosphere::SharedGeosphere::from(geosphere);
 
         Ok(Engine {
             viewport,
-            shared_world,
+            shared_geosphere,
             last_process_timestamp: std::time::Instant::now(),
             frame_per_second: 0,
             spectator: spectator::Spectator::default(),
@@ -59,7 +62,7 @@ impl EngineBuilder {
 impl Engine {
     pub fn render(&mut self) -> anyhow::Result<()> {
         let quad_instances = self.spectator.spectate(
-            self.shared_world.clone(),
+            self.shared_geosphere.clone(),
             &self.viewport.camera_properties(),
         );
 
@@ -105,7 +108,7 @@ impl Engine {
 
         self.spectator
             .purge_cache_beyond(purge_origin, purge_distance);
-        self.shared_world
+        self.shared_geosphere
             .lock()
             .unwrap()
             .purge_beyond(purge_origin, purge_distance);

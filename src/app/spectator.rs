@@ -1,9 +1,9 @@
 use parry3d::query::PointQuery;
 
+use super::geosphere;
+use super::geosphere::point_cluster;
 use super::viewport;
 use super::viewport::quad;
-use super::world;
-use super::world::point_cluster;
 
 type Lump = rapidhash::RapidHashMap<glam::IVec3, Vec<quad::QuadInstance>>;
 type SharedLump = std::sync::Arc<std::sync::Mutex<Lump>>;
@@ -41,11 +41,11 @@ impl<const N: u32> Spectator<N> {
     }
 
     fn create_quad_instances_from_slot(
-        p_shared_world: world::SharedWorld,
+        p_shared_geosphere: geosphere::SharedGeosphere,
         p_slot_position: glam::IVec3,
     ) -> Vec<quad::QuadInstance> {
-        let mut world = p_shared_world.lock().unwrap();
-        let (slot, cube) = world.slot_cube(p_slot_position);
+        let mut geosphere = p_shared_geosphere.lock().unwrap();
+        let (slot, cube) = geosphere.slot_cube(p_slot_position);
 
         if cube.is_none() {
             return Default::default();
@@ -69,7 +69,7 @@ impl<const N: u32> Spectator<N> {
                         0.5 + p_slot_position.z as f32,
                     ))
                     * quad::QuadRenderPipelineContext::QUAD_BACKWARD_MATRIX,
-                cube.world_texture_atlas_index_back,
+                cube.geosphere_texture_atlas_index_back,
             );
             instances.push(back_quad);
         }
@@ -83,7 +83,7 @@ impl<const N: u32> Spectator<N> {
                         -0.5 + p_slot_position.z as f32,
                     ))
                     * quad::QuadRenderPipelineContext::QUAD_FORWARD_MATRIX,
-                cube.world_texture_atlas_index_front,
+                cube.geosphere_texture_atlas_index_front,
             );
             instances.push(front_quad);
         }
@@ -97,7 +97,7 @@ impl<const N: u32> Spectator<N> {
                         0.0 + p_slot_position.z as f32,
                     ))
                     * quad::QuadRenderPipelineContext::QUAD_UPWARD_MATRIX,
-                cube.world_texture_atlas_index_top,
+                cube.geosphere_texture_atlas_index_top,
             );
             instances.push(up_quad);
         }
@@ -111,7 +111,7 @@ impl<const N: u32> Spectator<N> {
                         0.0 + p_slot_position.z as f32,
                     ))
                     * quad::QuadRenderPipelineContext::QUAD_DOWNWARD_MATRIX,
-                cube.world_texture_atlas_index_bottom,
+                cube.geosphere_texture_atlas_index_bottom,
             );
             instances.push(down_quad);
         }
@@ -125,7 +125,7 @@ impl<const N: u32> Spectator<N> {
                         0.0 + p_slot_position.z as f32,
                     ))
                     * quad::QuadRenderPipelineContext::QUAD_LEFT_MATRIX,
-                cube.world_texture_atlas_index_left,
+                cube.geosphere_texture_atlas_index_left,
             );
             instances.push(left_quad);
         }
@@ -139,7 +139,7 @@ impl<const N: u32> Spectator<N> {
                         0.0 + p_slot_position.z as f32,
                     ))
                     * quad::QuadRenderPipelineContext::QUAD_RIGHT_MATRIX,
-                cube.world_texture_atlas_index_right,
+                cube.geosphere_texture_atlas_index_right,
             );
             instances.push(right_quad);
         }
@@ -148,14 +148,14 @@ impl<const N: u32> Spectator<N> {
     }
 
     fn load_to_lump(
-        p_shared_world: world::SharedWorld,
+        p_shared_geosphere: geosphere::SharedGeosphere,
         p_lump_position: glam::IVec3,
         r_shared_lump: SharedLump,
     ) {
         let mut instances = Vec::<quad::QuadInstance>::default();
         for slot_point in Self::compute_slot_point_cluster_from_lump_position(p_lump_position) {
             instances.append(&mut Self::create_quad_instances_from_slot(
-                p_shared_world.clone(),
+                p_shared_geosphere.clone(),
                 slot_point,
             ));
         }
@@ -166,7 +166,7 @@ impl<const N: u32> Spectator<N> {
     }
 
     fn load_to_lump_threaded(
-        p_shared_world: world::SharedWorld,
+        p_shared_geosphere: geosphere::SharedGeosphere,
         p_lump_position: glam::IVec3,
         m_loading_lump: SharedLoadingLump,
         r_shared_lump: SharedLump,
@@ -177,14 +177,14 @@ impl<const N: u32> Spectator<N> {
 
         m_loading_lump.lock().unwrap().insert(p_lump_position);
         Some(tokio::task::spawn_blocking(move || {
-            Self::load_to_lump(p_shared_world, p_lump_position, r_shared_lump);
+            Self::load_to_lump(p_shared_geosphere, p_lump_position, r_shared_lump);
             m_loading_lump.lock().unwrap().remove(&p_lump_position);
         }))
     }
 
     pub fn spectate(
         &mut self,
-        p_shared_world: world::SharedWorld,
+        p_shared_geosphere: geosphere::SharedGeosphere,
         p_camera_properties: &viewport::ViewportCameraProperties,
     ) -> Vec<quad::QuadInstance> {
         let lump_cone_height =
@@ -224,7 +224,7 @@ impl<const N: u32> Spectator<N> {
                 quad_instances.extend_from_slice(instances.as_slice());
             } else {
                 std::mem::drop(Self::load_to_lump_threaded(
-                    p_shared_world.clone(),
+                    p_shared_geosphere.clone(),
                     lump_position,
                     self.loading_lump.clone(),
                     self.lump.clone(),

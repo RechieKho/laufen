@@ -8,13 +8,13 @@ pub mod slot;
 
 #[derive(partially::Partial)]
 #[partially(derive(Default))]
-pub struct WorldBuilder {
+pub struct GeosphereBuilder {
     pub loader: Box<dyn chunk::ChunkLoader>,
     pub saver: Box<dyn chunk::ChunkSaver>,
     pub cube_registry_builder: cube::CubeRegistryBuilder,
 }
 
-impl WorldBuilder {
+impl GeosphereBuilder {
     pub fn try_with_sample() -> anyhow::Result<Self> {
         Ok(Self {
             loader: Box::new(chunk::SampleChunkLoader::default()),
@@ -23,8 +23,8 @@ impl WorldBuilder {
         })
     }
 
-    pub fn build(self) -> World {
-        World {
+    pub fn build(self) -> Geosphere {
+        Geosphere {
             chunk_map: chunk::ChunkMap::default(),
             loader: self.loader,
             saver: self.saver,
@@ -33,16 +33,16 @@ impl WorldBuilder {
     }
 }
 
-pub type SharedWorld = std::sync::Arc<std::sync::Mutex<World>>;
+pub type SharedGeosphere = std::sync::Arc<std::sync::Mutex<Geosphere>>;
 
-impl From<World> for SharedWorld {
-    fn from(p_value: World) -> Self {
+impl From<Geosphere> for SharedGeosphere {
+    fn from(p_value: Geosphere) -> Self {
         std::sync::Arc::new(std::sync::Mutex::new(p_value))
     }
 }
 
 #[derive(getset::Getters)]
-pub struct World {
+pub struct Geosphere {
     chunk_map: chunk::ChunkMap,
     loader: Box<dyn chunk::ChunkLoader>,
     saver: Box<dyn chunk::ChunkSaver>,
@@ -51,11 +51,11 @@ pub struct World {
     cube_registry: cube::CubeRegistry,
 }
 
-unsafe impl Send for World {}
+unsafe impl Send for Geosphere {}
 
-unsafe impl Sync for World {}
+unsafe impl Sync for Geosphere {}
 
-impl World {
+impl Geosphere {
     fn bake_hidden_face(&mut self, p_position: glam::IVec3) {
         self.slot(p_position).display_upward_quad = self
             .slot(p_position + glam::IVec3::Y)

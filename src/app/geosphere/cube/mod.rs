@@ -23,12 +23,12 @@ impl CubeResourceId {
 
 #[derive(Clone)]
 pub struct Cube {
-    pub world_texture_atlas_index_top: u32,
-    pub world_texture_atlas_index_bottom: u32,
-    pub world_texture_atlas_index_left: u32,
-    pub world_texture_atlas_index_right: u32,
-    pub world_texture_atlas_index_front: u32,
-    pub world_texture_atlas_index_back: u32,
+    pub geosphere_texture_atlas_index_top: u32,
+    pub geosphere_texture_atlas_index_bottom: u32,
+    pub geosphere_texture_atlas_index_left: u32,
+    pub geosphere_texture_atlas_index_right: u32,
+    pub geosphere_texture_atlas_index_front: u32,
+    pub geosphere_texture_atlas_index_back: u32,
 }
 
 type CubeMap = std::collections::BTreeMap<CubeResourceId, Cube>;
@@ -39,7 +39,7 @@ pub struct CubeRegistry {
     cubes: CubeMap,
 
     #[getset(get = "pub")]
-    world_texture_images: Vec<image::DynamicImage>,
+    geosphere_texture_images: Vec<image::DynamicImage>,
 }
 
 impl CubeRegistry {
@@ -52,12 +52,12 @@ impl CubeRegistry {
 #[partially(derive(Default))]
 pub struct CubeBuilder {
     pub id: CubeResourceId,
-    pub world_texture_image_top: image::DynamicImage,
-    pub world_texture_image_bottom: image::DynamicImage,
-    pub world_texture_image_left: image::DynamicImage,
-    pub world_texture_image_right: image::DynamicImage,
-    pub world_texture_image_front: image::DynamicImage,
-    pub world_texture_image_back: image::DynamicImage,
+    pub geosphere_texture_image_top: image::DynamicImage,
+    pub geosphere_texture_image_bottom: image::DynamicImage,
+    pub geosphere_texture_image_left: image::DynamicImage,
+    pub geosphere_texture_image_right: image::DynamicImage,
+    pub geosphere_texture_image_front: image::DynamicImage,
+    pub geosphere_texture_image_back: image::DynamicImage,
 }
 
 #[derive(Default)]
@@ -78,12 +78,12 @@ impl CubeRegistryBuilder {
         let mut builder = Self::default();
         builder.cube_builders.push(CubeBuilder {
             id: CubeResourceId::try_default()?,
-            world_texture_image_top: dirt_top,
-            world_texture_image_left: dirt_side.clone(),
-            world_texture_image_right: dirt_side.clone(),
-            world_texture_image_front: dirt_side.clone(),
-            world_texture_image_back: dirt_side,
-            world_texture_image_bottom: dirt_bottom,
+            geosphere_texture_image_top: dirt_top,
+            geosphere_texture_image_left: dirt_side.clone(),
+            geosphere_texture_image_right: dirt_side.clone(),
+            geosphere_texture_image_front: dirt_side.clone(),
+            geosphere_texture_image_back: dirt_side,
+            geosphere_texture_image_bottom: dirt_bottom,
         });
         Ok(builder)
     }
@@ -94,31 +94,31 @@ impl CubeRegistryBuilder {
 
         for builder in self.cube_builders {
             let id = builder.id;
-            let world_texture_atlas_index_top = images.len() as u32;
-            images.push(builder.world_texture_image_top);
-            let world_texture_atlas_index_bottom = images.len() as u32;
-            images.push(builder.world_texture_image_bottom);
-            let world_texture_atlas_index_left = images.len() as u32;
-            images.push(builder.world_texture_image_left);
-            let world_texture_atlas_index_right = images.len() as u32;
-            images.push(builder.world_texture_image_right);
-            let world_texture_atlas_index_front = images.len() as u32;
-            images.push(builder.world_texture_image_front);
-            let world_texture_atlas_index_back = images.len() as u32;
-            images.push(builder.world_texture_image_back);
+            let geosphere_texture_atlas_index_top = images.len() as u32;
+            images.push(builder.geosphere_texture_image_top);
+            let geosphere_texture_atlas_index_bottom = images.len() as u32;
+            images.push(builder.geosphere_texture_image_bottom);
+            let geosphere_texture_atlas_index_left = images.len() as u32;
+            images.push(builder.geosphere_texture_image_left);
+            let geosphere_texture_atlas_index_right = images.len() as u32;
+            images.push(builder.geosphere_texture_image_right);
+            let geosphere_texture_atlas_index_front = images.len() as u32;
+            images.push(builder.geosphere_texture_image_front);
+            let geosphere_texture_atlas_index_back = images.len() as u32;
+            images.push(builder.geosphere_texture_image_back);
 
             let cube = Cube {
-                world_texture_atlas_index_top,
-                world_texture_atlas_index_bottom,
-                world_texture_atlas_index_left,
-                world_texture_atlas_index_right,
-                world_texture_atlas_index_front,
-                world_texture_atlas_index_back,
+                geosphere_texture_atlas_index_top,
+                geosphere_texture_atlas_index_bottom,
+                geosphere_texture_atlas_index_left,
+                geosphere_texture_atlas_index_right,
+                geosphere_texture_atlas_index_front,
+                geosphere_texture_atlas_index_back,
             };
             registry.register(id, cube);
         }
 
-        registry.world_texture_images = images;
+        registry.geosphere_texture_images = images;
         registry
     }
 }

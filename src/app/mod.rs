@@ -1,7 +1,9 @@
+pub mod biosphere;
 pub mod engine;
+pub mod geosphere;
+pub mod provider;
 pub mod spectator;
 pub mod viewport;
-pub mod world;
 
 #[derive(Default)]
 pub struct App {
