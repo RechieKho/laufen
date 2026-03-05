@@ -1,5 +1,6 @@
 use shipyard::IntoIter;
 
+use super::relay;
 use crate::adapter::net;
 use crate::app::biosphere;
 use crate::app::geosphere;
@@ -14,7 +15,10 @@ pub struct Provider {
 #[derive(partially::Partial)]
 #[partially(derive(Default))]
 pub struct ProviderBuilder {
-    pub server_context_builder: net::server::ServerContextBuilder,
+    pub server_max_client: usize,
+    pub server_overriding_current_time: Option<std::time::Duration>,
+    pub server_overriding_protocol_id: Option<u64>,
+    pub server_authentication: net::server::ServerAuthentication,
     pub geosphere_builder: geosphere::GeosphereBuilder,
 }
 
@@ -24,9 +28,16 @@ pub struct ProviderBuilderParameters {
 
 impl ProviderBuilder {
     pub fn build(self, p_parameters: ProviderBuilderParameters) -> Provider {
+        let server_context_builder = net::server::ServerContextBuilder {
+            max_client: self.server_max_client,
+            overriding_current_time: self.server_overriding_current_time,
+            overriding_protocol_id: self.server_overriding_protocol_id,
+            authentication: self.server_authentication,
+            connection_config: relay::RelayChannel::connection_config(),
+        };
+
         Provider {
-            server_context: self
-                .server_context_builder
+            server_context: server_context_builder
                 .build(p_parameters.server_context_builder_parameters),
             geosphere: self.geosphere_builder.build(),
             biosphere: biosphere::Biosphere::default(),
@@ -63,7 +74,45 @@ impl Provider {
             }
         }
 
-        // TODO: Handle Relay requests and responses.
+        for id in self.server_context.get_client_ids() {
+            while let Some(message) = self
+                .server_context
+                .receive_from(id, relay::RelayChannel::Geosphere)
+            {
+                let message =
+                    postcard::from_bytes::<relay::GeosphereInputMessage>(&message).unwrap();
+
+                let (slot, cube) = self.geosphere.slot_cube(message.position);
+
+                let output_message = Vec::<u8>::default();
+                let output_message = postcard::to_extend(
+                    &relay::GeosphereOutputMessage { slot: *slot, cube },
+                    output_message,
+                )
+                .unwrap();
+
+                self.server_context
+                    .send(id, relay::RelayChannel::Geosphere, output_message);
+            }
+
+            if self
+                .server_context
+                .receive_from(id, relay::RelayChannel::CubeRegistry)
+                .is_some()
+            {
+                let output_message = Vec::<u8>::default();
+                let output_message = postcard::to_extend(
+                    &relay::CubeRegistryOutputMessage {
+                        cube_registry: self.geosphere.cube_registry().clone(),
+                    },
+                    output_message,
+                )
+                .unwrap();
+
+                self.server_context
+                    .send(id, relay::RelayChannel::CubeRegistry, output_message);
+            }
+        }
 
         Ok(())
     }

@@ -1,38 +1,78 @@
-use crate::app::geosphere;
+use std::time::Duration;
+
+use crate::{adapter::net, app::geosphere};
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
-pub struct CubeRegistryQueryInput();
+pub struct CubeRegistryInputMessage();
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
-pub struct CubeRegistryQueryOutput {
-    cube_registry: geosphere::cube::CubeRegistry,
+pub struct CubeRegistryOutputMessage {
+    pub cube_registry: geosphere::cube::CubeRegistry,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
-pub enum CubeRegistryQuery {
-    Input(CubeRegistryQueryInput),
-    Output(CubeRegistryQueryOutput),
+pub struct GeosphereInputMessage {
+    pub position: glam::IVec3,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
-pub struct GeosphereQueryInput {
-    position: glam::IVec3,
+pub struct GeosphereOutputMessage {
+    pub slot: geosphere::slot::Slot,
+    pub cube: Option<geosphere::cube::Cube>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
-pub struct GeosphereQueryOutput {
-    slot: geosphere::slot::Slot,
-    cube: Option<geosphere::cube::Cube>,
+pub enum RelayChannel {
+    Geosphere,
+    CubeRegistry,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
-pub enum GeosphereQuery {
-    Input(GeosphereQueryInput),
-    Output(GeosphereQueryOutput),
+impl From<RelayChannel> for u8 {
+    fn from(p_value: RelayChannel) -> Self {
+        p_value.channel_id()
+    }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
-pub enum Relay {
-    CubeRegistry(CubeRegistryQuery),
-    Geosphere(GeosphereQuery),
+impl RelayChannel {
+    const RESEND_TIME: Duration = Duration::from_millis(300);
+
+    pub fn channel_id(&self) -> u8 {
+        match self {
+            RelayChannel::Geosphere => 0,
+            RelayChannel::CubeRegistry => 1,
+        }
+    }
+
+    pub fn channels_config() -> Vec<net::server::ChannelConfig> {
+        vec![
+            net::server::ChannelConfig {
+                channel_id: 0,
+                max_memory_usage_bytes: std::cmp::max(
+                    std::mem::size_of::<GeosphereInputMessage>(),
+                    std::mem::size_of::<GeosphereOutputMessage>(),
+                ),
+                send_type: net::server::SendType::ReliableUnordered {
+                    resend_time: Self::RESEND_TIME,
+                },
+            },
+            net::server::ChannelConfig {
+                channel_id: 1,
+                max_memory_usage_bytes: std::cmp::max(
+                    std::mem::size_of::<CubeRegistryInputMessage>(),
+                    std::mem::size_of::<CubeRegistryOutputMessage>(),
+                ),
+                send_type: net::server::SendType::ReliableOrdered {
+                    resend_time: Self::RESEND_TIME,
+                },
+            },
+        ]
+    }
+
+    pub fn connection_config() -> net::server::ConnectionConfig {
+        net::server::ConnectionConfig {
+            available_bytes_per_tick: 60_000,
+            server_channels_config: Self::channels_config(),
+            client_channels_config: Self::channels_config(),
+        }
+    }
 }
