@@ -27,6 +27,17 @@ pub struct EngineBuilderParameters<'a> {
     pub event_loop: &'a winit::event_loop::ActiveEventLoop,
 }
 
+pub fn deserialize_geosphere_texture_image(
+    p_geosphere: &geosphere::Geosphere,
+) -> Vec<renderer::texture::TextureImage> {
+    p_geosphere
+        .cube_registry()
+        .geosphere_serializable_texture_image()
+        .iter()
+        .map(|p_image| p_image.clone().to_texture_image().unwrap())
+        .collect::<Vec<renderer::texture::TextureImage>>()
+}
+
 impl EngineBuilder {
     pub fn try_default() -> anyhow::Result<Self> {
         Ok(Self {
@@ -36,20 +47,7 @@ impl EngineBuilder {
 
     pub fn build<'a>(self, p_parameters: EngineBuilderParameters<'a>) -> anyhow::Result<Engine> {
         let geosphere = geosphere::GeosphereBuilder::try_with_sample()?.build();
-        let geosphere_texture_images = geosphere
-            .cube_registry()
-            .geosphere_serializable_texture_image()
-            .iter()
-            .map(|p_image| p_image.clone().to_texture_image().unwrap())
-            .collect::<Vec<renderer::texture::TextureImage>>();
-
-        let atlas_builder = viewport::grid_texture_atlas::GridTextureAtlasBuilder {
-            cell_size: self.texture_atlas_cell_size,
-            images: geosphere_texture_images.as_slice(),
-            texture_label: Some("Cube texture atlas"),
-        };
-
-        let viewport = viewport::Viewport::new(p_parameters.event_loop, atlas_builder)?;
+        let viewport = viewport::Viewport::new(p_parameters.event_loop)?;
         let shared_geosphere = geosphere::SharedGeosphere::from(geosphere);
 
         Ok(Engine {

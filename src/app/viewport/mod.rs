@@ -46,7 +46,14 @@ impl Default for ViewportCameraProperties {
 }
 
 impl Viewport {
-    pub fn new(
+    pub fn new(p_event_loop: &winit::event_loop::ActiveEventLoop) -> anyhow::Result<Self> {
+        Self::with_texture_atlas_builder(
+            p_event_loop,
+            grid_texture_atlas::GridTextureAtlasBuilder::default(),
+        )
+    }
+
+    pub fn with_texture_atlas_builder(
         p_event_loop: &winit::event_loop::ActiveEventLoop,
         p_texture_atlas_builder: grid_texture_atlas::GridTextureAtlasBuilder,
     ) -> anyhow::Result<Self> {
