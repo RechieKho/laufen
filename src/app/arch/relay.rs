@@ -17,6 +17,7 @@ pub struct GeosphereInputMessage {
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct GeosphereOutputMessage {
+    pub requested_position: glam::IVec3,
     pub slot: geosphere::slot::Slot,
     pub cube: Option<geosphere::cube::Cube>,
 }

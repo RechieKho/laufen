@@ -86,7 +86,11 @@ impl Provider {
 
                 let output_message = Vec::<u8>::default();
                 let output_message = postcard::to_extend(
-                    &relay::GeosphereOutputMessage { slot: *slot, cube },
+                    &relay::GeosphereOutputMessage {
+                        requested_position: message.position,
+                        slot: *slot,
+                        cube,
+                    },
                     output_message,
                 )
                 .unwrap();
