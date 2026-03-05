@@ -1,31 +1,9 @@
 use crate::adapter::renderer;
 use crate::adapter::renderer::*;
+use crate::app::arch;
 
 use super::geosphere;
 use super::viewport;
-
-#[derive(getset::Getters, getset::MutGetters)]
-pub struct Engine {
-    #[getset(get = "pub", get_mut = "pub")]
-    viewport: viewport::Viewport,
-
-    #[getset(get = "pub")]
-    shared_geosphere: geosphere::SharedGeosphere,
-
-    last_process_timestamp: std::time::Instant,
-    frame_per_second: u32,
-    spectator: geosphere::spectator::Spectator,
-}
-
-#[derive(partially::Partial)]
-#[partially(derive(Default))]
-pub struct EngineBuilder {
-    pub texture_atlas_cell_size: std::num::NonZeroU32,
-}
-
-pub struct EngineBuilderParameters<'a> {
-    pub event_loop: &'a winit::event_loop::ActiveEventLoop,
-}
 
 pub fn deserialize_geosphere_texture_image(
     p_geosphere: &geosphere::Geosphere,
@@ -38,34 +16,64 @@ pub fn deserialize_geosphere_texture_image(
         .collect::<Vec<renderer::texture::TextureImage>>()
 }
 
-impl EngineBuilder {
-    pub fn try_default() -> anyhow::Result<Self> {
+#[derive(getset::Getters, getset::MutGetters)]
+pub struct Engine {
+    #[getset(get = "pub", get_mut = "pub")]
+    viewport: viewport::Viewport,
+
+    last_process_timestamp: std::time::Instant,
+    frame_per_second: u32,
+
+    provider: arch::provider::Provider,
+    consumer: arch::consumer::Consumer,
+}
+
+#[derive(partially::Partial)]
+#[partially(derive(Default))]
+pub struct UnsecureEngineBuilder {
+    pub provider_builder: arch::provider::ProviderBuilder,
+    pub consumer_builder: arch::consumer::UnsecureConsumerBuilder,
+}
+
+pub struct UnsecureEngineBuilderParameters<'a> {
+    pub event_loop: &'a winit::event_loop::ActiveEventLoop,
+    pub provider_builder_parameters: arch::provider::ProviderBuilderParameters,
+    pub consumer_builder_parameters: arch::consumer::UnsecureConsumerBuilderParameters,
+}
+
+impl UnsecureEngineBuilder {
+    pub fn try_with_sample() -> anyhow::Result<Self> {
         Ok(Self {
-            texture_atlas_cell_size: std::num::NonZeroU32::new(24).unwrap(),
+            provider_builder: arch::provider::ProviderBuilder::try_with_sample()?,
+            consumer_builder: arch::consumer::UnsecureConsumerBuilder::default(),
         })
     }
 
-    pub fn build<'a>(self, p_parameters: EngineBuilderParameters<'a>) -> anyhow::Result<Engine> {
-        let geosphere = geosphere::GeosphereBuilder::try_with_sample()?.build();
+    pub fn build<'a>(
+        self,
+        p_parameters: UnsecureEngineBuilderParameters<'a>,
+    ) -> anyhow::Result<Engine> {
         let viewport = viewport::Viewport::new(p_parameters.event_loop)?;
-        let shared_geosphere = geosphere::SharedGeosphere::from(geosphere);
+        let provider = self
+            .provider_builder
+            .build(p_parameters.provider_builder_parameters);
+        let consumer = self
+            .consumer_builder
+            .build(p_parameters.consumer_builder_parameters);
 
         Ok(Engine {
             viewport,
-            shared_geosphere,
             last_process_timestamp: std::time::Instant::now(),
             frame_per_second: 0,
-            spectator: geosphere::spectator::Spectator::default(),
+            provider,
+            consumer,
         })
     }
 }
 
 impl Engine {
     pub fn render(&mut self) -> anyhow::Result<()> {
-        let quad_instances = self.spectator.spectate_geosphere(
-            self.shared_geosphere.clone(),
-            &self.viewport.camera_properties(),
-        );
+        let quad_instances = self.consumer.spectate(&self.viewport.camera_properties());
 
         let frame_per_second_text = format!("FPS: {}", self.frame_per_second);
         let text = text::Text::new(frame_per_second_text.as_str())
@@ -97,22 +105,10 @@ impl Engine {
             self.viewport.resize(width, height);
         }
 
+        self.consumer.poll(delta).unwrap();
+        self.provider.poll(delta).unwrap();
+
         let camera_properties = self.viewport.camera_properties();
-
-        let purge_origin = glam::IVec3::new(
-            camera_properties.origin.x as _,
-            camera_properties.origin.y as _,
-            camera_properties.origin.z as _,
-        );
-        let purge_distance =
-            ((camera_properties.z_far - camera_properties.z_near).abs() * 5.0) as u32;
-
-        self.spectator
-            .purge_cache_beyond(purge_origin, purge_distance);
-        self.shared_geosphere
-            .lock()
-            .unwrap()
-            .purge_beyond(purge_origin, purge_distance);
 
         const LINEAR_SPEED: f32 = 0.2;
         const ANGULAR_SPEED: f32 = std::f32::consts::PI / 100.0;

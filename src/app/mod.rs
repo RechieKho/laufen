@@ -1,3 +1,5 @@
+use crate::adapter::net;
+
 pub mod arch;
 pub mod biosphere;
 pub mod engine;
@@ -11,13 +13,37 @@ pub struct App {
     engine: Option<engine::Engine>,
 }
 
+const SAMPLE_CLIENT_ADDRESS: std::net::SocketAddr = std::net::SocketAddr::new(
+    std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
+    0,
+);
+const SAMPLE_SERVER_ADDRESS: std::net::SocketAddr = std::net::SocketAddr::new(
+    std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
+    5000,
+);
+
 impl winit::application::ApplicationHandler<()> for App {
     fn resumed(&mut self, p_event_loop: &winit::event_loop::ActiveEventLoop) {
         if self.engine.is_none() {
-            let builder = engine::EngineBuilder::try_default().unwrap();
+            let builder = engine::UnsecureEngineBuilder::try_with_sample().unwrap();
             let engine = builder
-                .build(engine::EngineBuilderParameters {
+                .build(engine::UnsecureEngineBuilderParameters {
                     event_loop: p_event_loop,
+                    provider_builder_parameters: arch::provider::ProviderBuilderParameters {
+                        server_context_builder_parameters:
+                            net::server::ServerContextBuilderParameters {
+                                address: SAMPLE_SERVER_ADDRESS,
+                            },
+                    },
+                    consumer_builder_parameters:
+                        arch::consumer::UnsecureConsumerBuilderParameters {
+                            client_context_builder_parameters:
+                                net::client::UnsecureClientContextBuilderParameters {
+                                    server_address: SAMPLE_SERVER_ADDRESS,
+                                    client_address: SAMPLE_CLIENT_ADDRESS,
+                                    client_id: 0,
+                                },
+                        },
                 })
                 .unwrap();
             self.engine = Some(engine);

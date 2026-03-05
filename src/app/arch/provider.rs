@@ -27,6 +27,16 @@ pub struct ProviderBuilderParameters {
 }
 
 impl ProviderBuilder {
+    pub fn try_with_sample() -> anyhow::Result<Self> {
+        Ok(Self {
+            server_max_client: 60,
+            server_overriding_current_time: None,
+            server_overriding_protocol_id: None,
+            server_authentication: net::server::ServerAuthentication::Unsecure,
+            geosphere_builder: geosphere::GeosphereBuilder::try_with_sample()?,
+        })
+    }
+
     pub fn build(self, p_parameters: ProviderBuilderParameters) -> Provider {
         let server_context_builder = net::server::ServerContextBuilder {
             max_client: self.server_max_client,

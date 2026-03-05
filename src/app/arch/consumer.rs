@@ -55,6 +55,8 @@ impl std::future::Future for ProviderResponse {
     }
 }
 
+#[derive(partially::Partial, Default)]
+#[partially(derive(Default))]
 pub struct UnsecureConsumerBuilder {
     pub client_overriding_current_time: Option<std::time::Duration>,
     pub client_overriding_protocol_id: Option<u64>,
