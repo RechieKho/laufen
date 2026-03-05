@@ -151,7 +151,7 @@ impl Spectator {
         instances
     }
 
-    fn load_to_lump<P: SlotCubeProxy + Clone + Send + Sync + 'static>(
+    fn load_to_lump<P: SlotCubeProxy + Send + Sync + 'static>(
         p_slot_cube_proxy: P,
         p_lump_position: glam::IVec3,
         m_loading_lump: SharedLoadingLump,

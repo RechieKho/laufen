@@ -2,12 +2,56 @@ use super::relay;
 use crate::adapter::net;
 use crate::app::geosphere::cube;
 use crate::app::geosphere::spectator;
+use crate::app::viewport;
+use crate::app::viewport::quad;
 
 pub type SharedClientContext = std::sync::Arc<std::sync::Mutex<net::client::ClientContext>>;
 
 impl From<net::client::ClientContext> for SharedClientContext {
     fn from(p_value: net::client::ClientContext) -> Self {
         std::sync::Arc::new(std::sync::Mutex::new(p_value))
+    }
+}
+
+pub struct ProviderResponse {
+    interval: tokio::time::Interval,
+    shared_client_context: SharedClientContext,
+    channel: relay::RelayChannel,
+}
+
+impl ProviderResponse {
+    const DEFAULT_INTERVAL_DURATION: std::time::Duration = std::time::Duration::from_millis(300);
+
+    pub fn new(
+        p_shared_client_context: SharedClientContext,
+        p_channel: relay::RelayChannel,
+    ) -> Self {
+        Self {
+            interval: tokio::time::interval(Self::DEFAULT_INTERVAL_DURATION),
+            shared_client_context: p_shared_client_context,
+            channel: p_channel,
+        }
+    }
+}
+
+impl std::future::Future for ProviderResponse {
+    type Output = net::server::Bytes;
+
+    fn poll(
+        mut self: std::pin::Pin<&mut Self>,
+        p_cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
+        if let Some(message) = self
+            .shared_client_context
+            .lock()
+            .unwrap()
+            .receive(self.channel.clone())
+        {
+            return std::task::Poll::Ready(message);
+        }
+
+        let _ = self.interval.poll_tick(p_cx);
+        std::task::Poll::Pending
     }
 }
 
@@ -35,7 +79,6 @@ impl UnsecureConsumerBuilder {
         );
 
         Consumer {
-            is_cube_registry_requested: false,
             spectator: spectator::Spectator::default(),
             shared_client_context,
         }
@@ -43,8 +86,6 @@ impl UnsecureConsumerBuilder {
 }
 
 pub struct Consumer {
-    is_cube_registry_requested: bool,
-    #[allow(unused)]
     spectator: spectator::Spectator,
     shared_client_context: SharedClientContext,
 }
@@ -60,35 +101,69 @@ impl Consumer {
         Ok(())
     }
 
-    pub fn cube_registry(&mut self) -> Option<cube::CubeRegistry> {
+    pub fn slot_cube_proxy(&mut self) -> impl spectator::SlotCubeProxy + Clone {
+        {
+            let shared_client_context = self.shared_client_context.clone();
+
+            async move |p_position: glam::IVec3| {
+                let input_message = Vec::<u8>::default();
+                let input_message = postcard::to_extend(
+                    &relay::GeosphereInputMessage {
+                        position: p_position,
+                    },
+                    input_message,
+                )
+                .unwrap();
+                shared_client_context
+                    .lock()
+                    .unwrap()
+                    .send(relay::RelayChannel::Geosphere, input_message);
+
+                let message = ProviderResponse::new(
+                    shared_client_context.clone(),
+                    relay::RelayChannel::Geosphere,
+                )
+                .await;
+
+                let output_message =
+                    postcard::from_bytes::<relay::GeosphereOutputMessage>(&message).unwrap();
+
+                (output_message.slot, output_message.cube)
+            }
+        }
+    }
+
+    pub async fn cube_registry(&mut self) -> Option<cube::CubeRegistry> {
         if !self.shared_client_context.lock().unwrap().is_connected() {
             return Default::default();
         }
 
-        if !self.is_cube_registry_requested {
-            let input_message = Vec::<u8>::default();
-            let input_message =
-                postcard::to_extend(&relay::CubeRegistryInputMessage(), input_message).unwrap();
-            self.shared_client_context
-                .lock()
-                .unwrap()
-                .send(relay::RelayChannel::CubeRegistry, input_message);
-            self.is_cube_registry_requested = true;
-            return Default::default();
-        }
-
-        if let Some(message) = self
-            .shared_client_context
+        let input_message = Vec::<u8>::default();
+        let input_message =
+            postcard::to_extend(&relay::CubeRegistryInputMessage(), input_message).unwrap();
+        self.shared_client_context
             .lock()
             .unwrap()
-            .receive(relay::RelayChannel::CubeRegistry)
-        {
-            let message =
-                postcard::from_bytes::<relay::CubeRegistryOutputMessage>(&message).unwrap();
-            self.is_cube_registry_requested = false;
-            return Some(message.cube_registry);
-        }
+            .send(relay::RelayChannel::CubeRegistry, input_message);
 
-        Default::default()
+        let message = ProviderResponse::new(
+            self.shared_client_context.clone(),
+            relay::RelayChannel::CubeRegistry,
+        )
+        .await;
+
+        Some(
+            postcard::from_bytes::<relay::CubeRegistryOutputMessage>(&message)
+                .unwrap()
+                .cube_registry,
+        )
+    }
+
+    pub fn spectate(
+        &mut self,
+        p_camera_properties: &viewport::ViewportCameraProperties,
+    ) -> Vec<quad::QuadInstance> {
+        let proxy = self.slot_cube_proxy();
+        self.spectator.spectate(proxy, p_camera_properties)
     }
 }
