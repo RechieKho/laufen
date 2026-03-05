@@ -12,11 +12,8 @@ type SharedLump = std::sync::Arc<std::sync::Mutex<Lump>>;
 type LoadingLump = rapidhash::RapidHashSet<glam::IVec3>;
 type SharedLoadingLump = std::sync::Arc<std::sync::Mutex<LoadingLump>>;
 
-pub type SlotCubeProxy = std::sync::Arc<
-    std::sync::Mutex<
-        dyn Fn(glam::IVec3) -> (slot::Slot, Option<cube::Cube>) + Send + Sync + 'static,
-    >,
->;
+pub trait SlotCubeProxy: AsyncFn(glam::IVec3) -> (slot::Slot, Option<cube::Cube>) {}
+impl<T> SlotCubeProxy for T where T: AsyncFn(glam::IVec3) -> (slot::Slot, Option<cube::Cube>) {}
 
 #[derive(Default)]
 pub struct Spectator {
@@ -48,11 +45,11 @@ impl Spectator {
         }
     }
 
-    fn create_quad_instances_from_slot(
-        p_slot_cube_proxy: SlotCubeProxy,
+    fn create_quad_instances_from_slot_cube(
+        p_slot_cube: (slot::Slot, Option<cube::Cube>),
         p_slot_position: glam::IVec3,
     ) -> Vec<quad::QuadInstance> {
-        let (slot, cube) = p_slot_cube_proxy.lock().unwrap()(p_slot_position);
+        let (slot, cube) = p_slot_cube;
 
         if cube.is_none() {
             return Default::default();
@@ -154,26 +151,8 @@ impl Spectator {
         instances
     }
 
-    fn load_to_lump(
-        p_slot_cube_proxy: SlotCubeProxy,
-        p_lump_position: glam::IVec3,
-        r_shared_lump: SharedLump,
-    ) {
-        let mut instances = Vec::<quad::QuadInstance>::default();
-        for slot_point in Self::compute_slot_point_cluster_from_lump_position(p_lump_position) {
-            instances.append(&mut Self::create_quad_instances_from_slot(
-                p_slot_cube_proxy.clone(),
-                slot_point,
-            ));
-        }
-        r_shared_lump
-            .lock()
-            .unwrap()
-            .insert(p_lump_position, instances);
-    }
-
-    fn load_to_lump_threaded(
-        p_slot_cube_proxy: SlotCubeProxy,
+    fn load_to_lump<P: SlotCubeProxy + Clone + Send + Sync + 'static>(
+        p_slot_cube_proxy: P,
         p_lump_position: glam::IVec3,
         m_loading_lump: SharedLoadingLump,
         r_shared_lump: SharedLump,
@@ -182,17 +161,28 @@ impl Spectator {
             return None;
         }
 
+        let handle = tokio::runtime::Handle::current();
+
         m_loading_lump.lock().unwrap().insert(p_lump_position);
         Some(tokio::task::spawn_blocking(move || {
-            p_slot_cube_proxy.lock().unwrap()(glam::IVec3::ZERO);
-            Self::load_to_lump(p_slot_cube_proxy, p_lump_position, r_shared_lump);
+            let mut instances = Vec::<quad::QuadInstance>::default();
+            for slot_point in Self::compute_slot_point_cluster_from_lump_position(p_lump_position) {
+                let slot_cube = handle.block_on(async { p_slot_cube_proxy(slot_point).await });
+                instances.append(&mut Self::create_quad_instances_from_slot_cube(
+                    slot_cube, slot_point,
+                ));
+            }
+            r_shared_lump
+                .lock()
+                .unwrap()
+                .insert(p_lump_position, instances);
             m_loading_lump.lock().unwrap().remove(&p_lump_position);
         }))
     }
 
-    pub fn spectate(
+    pub fn spectate<P: SlotCubeProxy + Clone + Send + Sync + 'static>(
         &mut self,
-        p_slot_cube_proxy: SlotCubeProxy,
+        p_slot_cube_proxy: P,
         p_camera_properties: &viewport::ViewportCameraProperties,
     ) -> Vec<quad::QuadInstance> {
         let lump_cone_height =
@@ -235,7 +225,7 @@ impl Spectator {
                 if load_count > Self::MAX_LOAD_PER_SPECTATE {
                     continue;
                 }
-                std::mem::drop(Self::load_to_lump_threaded(
+                std::mem::drop(Self::load_to_lump(
                     p_slot_cube_proxy.clone(),
                     lump_position,
                     self.loading_lump.clone(),
@@ -248,23 +238,22 @@ impl Spectator {
         quad_instances
     }
 
-    fn create_proxy_from_shared_geosphere(
-        p_shared_geosphere: super::SharedGeosphere,
-    ) -> SlotCubeProxy {
-        std::sync::Arc::new(std::sync::Mutex::new(move |p_position: glam::IVec3| {
-            let mut geosphere = p_shared_geosphere.lock().unwrap();
-            let (slot, cube) = geosphere.slot_cube(p_position);
-            (*slot, cube)
-        }))
-    }
-
     pub fn spectate_geosphere(
         &mut self,
         p_shared_geosphere: super::SharedGeosphere,
         p_camera_properties: &viewport::ViewportCameraProperties,
     ) -> Vec<quad::QuadInstance> {
-        let proxy = Self::create_proxy_from_shared_geosphere(p_shared_geosphere);
-        self.spectate(proxy, p_camera_properties)
+        {
+            let shared_geosphere = p_shared_geosphere.clone();
+
+            let proxy = async move |p_position: glam::IVec3| {
+                let mut geosphere = shared_geosphere.lock().unwrap();
+                let (slot, cube) = geosphere.slot_cube(p_position);
+                (*slot, cube)
+            };
+
+            self.spectate(proxy, p_camera_properties)
+        }
     }
 
     pub fn purge_cache_beyond(
