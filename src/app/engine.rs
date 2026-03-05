@@ -16,6 +16,21 @@ pub fn deserialize_geosphere_texture_image(
         .collect::<Vec<renderer::texture::TextureImage>>()
 }
 
+pub type SharedProvider = std::sync::Arc<std::sync::Mutex<arch::provider::Provider>>;
+pub type SharedConsumer = std::sync::Arc<std::sync::Mutex<arch::consumer::Consumer>>;
+
+impl From<arch::provider::Provider> for SharedProvider {
+    fn from(p_value: arch::provider::Provider) -> Self {
+        std::sync::Arc::new(std::sync::Mutex::new(p_value))
+    }
+}
+
+impl From<arch::consumer::Consumer> for SharedConsumer {
+    fn from(p_value: arch::consumer::Consumer) -> Self {
+        std::sync::Arc::new(std::sync::Mutex::new(p_value))
+    }
+}
+
 #[derive(getset::Getters, getset::MutGetters)]
 pub struct Engine {
     #[getset(get = "pub", get_mut = "pub")]
@@ -24,8 +39,7 @@ pub struct Engine {
     last_process_timestamp: std::time::Instant,
     frame_per_second: u32,
 
-    provider: arch::provider::Provider,
-    consumer: arch::consumer::Consumer,
+    consumer: SharedConsumer,
 }
 
 #[derive(partially::Partial)]
@@ -54,18 +68,45 @@ impl UnsecureEngineBuilder {
         p_parameters: UnsecureEngineBuilderParameters<'a>,
     ) -> anyhow::Result<Engine> {
         let viewport = viewport::Viewport::new(p_parameters.event_loop)?;
-        let provider = self
-            .provider_builder
-            .build(p_parameters.provider_builder_parameters);
-        let consumer = self
-            .consumer_builder
-            .build(p_parameters.consumer_builder_parameters);
+        let provider = SharedProvider::from(
+            self.provider_builder
+                .build(p_parameters.provider_builder_parameters),
+        );
+        let consumer = SharedConsumer::from(
+            self.consumer_builder
+                .build(p_parameters.consumer_builder_parameters),
+        );
+
+        {
+            let polling_provider = provider.clone();
+            tokio::spawn(async move {
+                let delta = std::time::Duration::from_millis(16);
+                let mut interval = tokio::time::interval(delta);
+
+                loop {
+                    let _ = polling_provider.lock().unwrap().poll(delta);
+                    interval.tick().await;
+                }
+            });
+        }
+
+        {
+            let polling_consumer = consumer.clone();
+            tokio::spawn(async move {
+                let delta = std::time::Duration::from_millis(16);
+                let mut interval = tokio::time::interval(delta);
+
+                loop {
+                    let _ = polling_consumer.lock().unwrap().poll(delta);
+                    interval.tick().await;
+                }
+            });
+        }
 
         Ok(Engine {
             viewport,
             last_process_timestamp: std::time::Instant::now(),
             frame_per_second: 0,
-            provider,
             consumer,
         })
     }
@@ -73,7 +114,11 @@ impl UnsecureEngineBuilder {
 
 impl Engine {
     pub fn render(&mut self) -> anyhow::Result<()> {
-        let quad_instances = self.consumer.spectate(&self.viewport.camera_properties());
+        let quad_instances = self
+            .consumer
+            .lock()
+            .unwrap()
+            .spectate(&self.viewport.camera_properties());
 
         let frame_per_second_text = format!("FPS: {}", self.frame_per_second);
         let text = text::Text::new(frame_per_second_text.as_str())
@@ -104,9 +149,6 @@ impl Engine {
         if let Some((width, height)) = p_input.resolution() {
             self.viewport.resize(width, height);
         }
-
-        self.consumer.poll(delta).unwrap();
-        self.provider.poll(delta).unwrap();
 
         let camera_properties = self.viewport.camera_properties();
 

@@ -3,7 +3,7 @@ use crate::app::viewport;
 
 pub type CubeResourceId = ustr::Ustr;
 
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, serde::Serialize, serde::Deserialize, Debug)]
 pub struct Cube {
     pub geosphere_texture_atlas_index_top: u32,
     pub geosphere_texture_atlas_index_bottom: u32,

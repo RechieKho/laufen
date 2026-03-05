@@ -14,20 +14,16 @@ impl From<net::client::ClientContext> for SharedClientContext {
 }
 
 pub struct ProviderResponse {
-    interval: tokio::time::Interval,
     shared_client_context: SharedClientContext,
     channel: relay::RelayChannel,
 }
 
 impl ProviderResponse {
-    const DEFAULT_INTERVAL_DURATION: std::time::Duration = std::time::Duration::from_millis(300);
-
     pub fn new(
         p_shared_client_context: SharedClientContext,
         p_channel: relay::RelayChannel,
     ) -> Self {
         Self {
-            interval: tokio::time::interval(Self::DEFAULT_INTERVAL_DURATION),
             shared_client_context: p_shared_client_context,
             channel: p_channel,
         }
@@ -38,7 +34,7 @@ impl std::future::Future for ProviderResponse {
     type Output = net::server::Bytes;
 
     fn poll(
-        mut self: std::pin::Pin<&mut Self>,
+        self: std::pin::Pin<&mut Self>,
         p_cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Self::Output> {
         if let Some(message) = self
@@ -50,7 +46,7 @@ impl std::future::Future for ProviderResponse {
             return std::task::Poll::Ready(message);
         }
 
-        let _ = self.interval.poll_tick(p_cx);
+        p_cx.waker().wake_by_ref();
         std::task::Poll::Pending
     }
 }

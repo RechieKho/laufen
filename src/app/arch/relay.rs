@@ -17,7 +17,6 @@ pub struct GeosphereInputMessage {
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct GeosphereOutputMessage {
-    pub requested_position: glam::IVec3,
     pub slot: geosphere::slot::Slot,
     pub cube: Option<geosphere::cube::Cube>,
 }
@@ -36,6 +35,7 @@ impl From<RelayChannel> for u8 {
 
 impl RelayChannel {
     const RESEND_TIME: Duration = Duration::from_millis(300);
+    const MAX_GEOSPHERE_MESSAGE_COUNT: usize = 512;
 
     pub fn channel_id(&self) -> u8 {
         match self {
@@ -51,8 +51,8 @@ impl RelayChannel {
                 max_memory_usage_bytes: std::cmp::max(
                     std::mem::size_of::<GeosphereInputMessage>(),
                     std::mem::size_of::<GeosphereOutputMessage>(),
-                ),
-                send_type: net::server::SendType::ReliableUnordered {
+                ) * Self::MAX_GEOSPHERE_MESSAGE_COUNT,
+                send_type: net::server::SendType::ReliableOrdered {
                     resend_time: Self::RESEND_TIME,
                 },
             },
