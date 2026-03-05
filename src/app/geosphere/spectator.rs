@@ -2,13 +2,21 @@ use crate::app::viewport;
 use crate::app::viewport::quad;
 use parry3d::query::PointQuery;
 
+use super::cube;
 use super::point_cluster;
+use super::slot;
 
 type Lump = rapidhash::RapidHashMap<glam::IVec3, Vec<quad::QuadInstance>>;
 type SharedLump = std::sync::Arc<std::sync::Mutex<Lump>>;
 
 type LoadingLump = rapidhash::RapidHashSet<glam::IVec3>;
 type SharedLoadingLump = std::sync::Arc<std::sync::Mutex<LoadingLump>>;
+
+pub type SlotCubeProxy = std::sync::Arc<
+    std::sync::Mutex<
+        dyn Fn(glam::IVec3) -> (slot::Slot, Option<cube::Cube>) + Send + Sync + 'static,
+    >,
+>;
 
 #[derive(Default)]
 pub struct Spectator {
@@ -18,7 +26,7 @@ pub struct Spectator {
 
 impl Spectator {
     pub const LUMP_SIZE: u32 = 8;
-    pub const MAX_LOAD_PER_SPECTATE: u32 = 64;
+    pub const MAX_LOAD_PER_SPECTATE: u32 = 128;
 
     #[inline]
     fn convert_slot_position_to_lump_position(p_slot_position: glam::IVec3) -> glam::IVec3 {
@@ -41,11 +49,10 @@ impl Spectator {
     }
 
     fn create_quad_instances_from_slot(
-        p_shared_geosphere: super::SharedGeosphere,
+        p_slot_cube_proxy: SlotCubeProxy,
         p_slot_position: glam::IVec3,
     ) -> Vec<quad::QuadInstance> {
-        let mut geosphere = p_shared_geosphere.lock().unwrap();
-        let (slot, cube) = geosphere.slot_cube(p_slot_position);
+        let (slot, cube) = p_slot_cube_proxy.lock().unwrap()(p_slot_position);
 
         if cube.is_none() {
             return Default::default();
@@ -148,14 +155,14 @@ impl Spectator {
     }
 
     fn load_to_lump(
-        p_shared_geosphere: super::SharedGeosphere,
+        p_slot_cube_proxy: SlotCubeProxy,
         p_lump_position: glam::IVec3,
         r_shared_lump: SharedLump,
     ) {
         let mut instances = Vec::<quad::QuadInstance>::default();
         for slot_point in Self::compute_slot_point_cluster_from_lump_position(p_lump_position) {
             instances.append(&mut Self::create_quad_instances_from_slot(
-                p_shared_geosphere.clone(),
+                p_slot_cube_proxy.clone(),
                 slot_point,
             ));
         }
@@ -166,7 +173,7 @@ impl Spectator {
     }
 
     fn load_to_lump_threaded(
-        p_shared_geosphere: super::SharedGeosphere,
+        p_slot_cube_proxy: SlotCubeProxy,
         p_lump_position: glam::IVec3,
         m_loading_lump: SharedLoadingLump,
         r_shared_lump: SharedLump,
@@ -177,14 +184,15 @@ impl Spectator {
 
         m_loading_lump.lock().unwrap().insert(p_lump_position);
         Some(tokio::task::spawn_blocking(move || {
-            Self::load_to_lump(p_shared_geosphere, p_lump_position, r_shared_lump);
+            p_slot_cube_proxy.lock().unwrap()(glam::IVec3::ZERO);
+            Self::load_to_lump(p_slot_cube_proxy, p_lump_position, r_shared_lump);
             m_loading_lump.lock().unwrap().remove(&p_lump_position);
         }))
     }
 
     pub fn spectate(
         &mut self,
-        p_shared_geosphere: super::SharedGeosphere,
+        p_slot_cube_proxy: SlotCubeProxy,
         p_camera_properties: &viewport::ViewportCameraProperties,
     ) -> Vec<quad::QuadInstance> {
         let lump_cone_height =
@@ -228,7 +236,7 @@ impl Spectator {
                     continue;
                 }
                 std::mem::drop(Self::load_to_lump_threaded(
-                    p_shared_geosphere.clone(),
+                    p_slot_cube_proxy.clone(),
                     lump_position,
                     self.loading_lump.clone(),
                     self.lump.clone(),
@@ -238,6 +246,25 @@ impl Spectator {
         }
 
         quad_instances
+    }
+
+    fn create_proxy_from_shared_geosphere(
+        p_shared_geosphere: super::SharedGeosphere,
+    ) -> SlotCubeProxy {
+        std::sync::Arc::new(std::sync::Mutex::new(move |p_position: glam::IVec3| {
+            let mut geosphere = p_shared_geosphere.lock().unwrap();
+            let (slot, cube) = geosphere.slot_cube(p_position);
+            (*slot, cube)
+        }))
+    }
+
+    pub fn spectate_geosphere(
+        &mut self,
+        p_shared_geosphere: super::SharedGeosphere,
+        p_camera_properties: &viewport::ViewportCameraProperties,
+    ) -> Vec<quad::QuadInstance> {
+        let proxy = Self::create_proxy_from_shared_geosphere(p_shared_geosphere);
+        self.spectate(proxy, p_camera_properties)
     }
 
     pub fn purge_cache_beyond(

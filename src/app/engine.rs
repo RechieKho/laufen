@@ -64,7 +64,7 @@ impl EngineBuilder {
 
 impl Engine {
     pub fn render(&mut self) -> anyhow::Result<()> {
-        let quad_instances = self.spectator.spectate(
+        let quad_instances = self.spectator.spectate_geosphere(
             self.shared_geosphere.clone(),
             &self.viewport.camera_properties(),
         );
