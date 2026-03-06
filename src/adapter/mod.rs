@@ -2,6 +2,7 @@ pub mod model;
 pub mod net;
 pub mod renderer;
 pub mod script;
+pub mod shared;
 
 pub use model::run_sample_model;
 pub use net::run_sample_net;

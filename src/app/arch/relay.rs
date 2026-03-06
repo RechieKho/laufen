@@ -10,12 +10,12 @@ pub struct CubeRegistryOutputMessage {
     pub cube_registry: geosphere::cube::CubeRegistry,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct GeosphereInputMessage {
     pub position: glam::IVec3,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct GeosphereOutputMessage {
     pub slot: geosphere::slot::Slot,
     pub cube: Option<geosphere::cube::Cube>,

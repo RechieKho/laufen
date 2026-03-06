@@ -1,3 +1,4 @@
+use crate::adapter::shared;
 use crate::app::viewport;
 use crate::app::viewport::quad;
 use parry3d::query::PointQuery;
@@ -7,10 +8,10 @@ use super::point_cluster;
 use super::slot;
 
 type Lump = rapidhash::RapidHashMap<glam::IVec3, Vec<quad::QuadInstance>>;
-type SharedLump = std::sync::Arc<std::sync::Mutex<Lump>>;
+type SharedLump = shared::Shared<Lump>;
 
 type LoadingLump = rapidhash::RapidHashSet<glam::IVec3>;
-type SharedLoadingLump = std::sync::Arc<std::sync::Mutex<LoadingLump>>;
+type SharedLoadingLump = shared::Shared<LoadingLump>;
 
 pub trait SlotCubeProxy: AsyncFn(glam::IVec3) -> (slot::Slot, Option<cube::Cube>) {}
 impl<T> SlotCubeProxy for T where T: AsyncFn(glam::IVec3) -> (slot::Slot, Option<cube::Cube>) {}
@@ -154,6 +155,7 @@ impl Spectator {
     fn load_to_lump<P: SlotCubeProxy + Send + Sync + 'static>(
         p_slot_cube_proxy: P,
         p_lump_position: glam::IVec3,
+        p_abort_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
         m_loading_lump: SharedLoadingLump,
         r_shared_lump: SharedLump,
     ) -> Option<tokio::task::JoinHandle<()>> {
@@ -167,6 +169,9 @@ impl Spectator {
         Some(tokio::task::spawn_blocking(move || {
             let mut instances = Vec::<quad::QuadInstance>::default();
             for slot_point in Self::compute_slot_point_cluster_from_lump_position(p_lump_position) {
+                if p_abort_flag.load(std::sync::atomic::Ordering::Relaxed) {
+                    return;
+                }
                 let slot_cube = handle.block_on(async { p_slot_cube_proxy(slot_point).await });
                 instances.append(&mut Self::create_quad_instances_from_slot_cube(
                     slot_cube, slot_point,
@@ -183,6 +188,7 @@ impl Spectator {
     pub fn spectate<P: SlotCubeProxy + Clone + Send + Sync + 'static>(
         &mut self,
         p_slot_cube_proxy: P,
+        p_abort_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
         p_camera_properties: &viewport::ViewportCameraProperties,
     ) -> Vec<quad::QuadInstance> {
         let lump_cone_height =
@@ -228,6 +234,7 @@ impl Spectator {
                 std::mem::drop(Self::load_to_lump(
                     p_slot_cube_proxy.clone(),
                     lump_position,
+                    p_abort_flag.clone(),
                     self.loading_lump.clone(),
                     self.lump.clone(),
                 ));
@@ -241,6 +248,7 @@ impl Spectator {
     pub fn spectate_geosphere(
         &mut self,
         p_shared_geosphere: super::SharedGeosphere,
+        p_abort_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
         p_camera_properties: &viewport::ViewportCameraProperties,
     ) -> Vec<quad::QuadInstance> {
         {
@@ -252,7 +260,7 @@ impl Spectator {
                 (*slot, cube)
             };
 
-            self.spectate(proxy, p_camera_properties)
+            self.spectate(proxy, p_abort_flag, p_camera_properties)
         }
     }
 

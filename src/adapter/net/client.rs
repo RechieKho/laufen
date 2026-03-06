@@ -55,6 +55,10 @@ impl ClientContext {
         self.client.is_connected()
     }
 
+    pub fn is_connecting(&self) -> bool {
+        self.client.is_connecting()
+    }
+
     pub fn receive<C>(&mut self, p_channel_id: C) -> Option<server::Bytes>
     where
         C: Into<u8>,
@@ -76,7 +80,9 @@ impl ClientContext {
     ) -> anyhow::Result<(), server::NetcodeTransportError> {
         self.client.update(p_delta);
         self.transport.update(p_delta, &mut self.client)?;
-        self.transport.send_packets(&mut self.client)?;
+        if self.client.is_connected() {
+            self.transport.send_packets(&mut self.client)?;
+        }
         Ok(())
     }
 }

@@ -1,5 +1,6 @@
 use super::relay;
 use crate::adapter::net;
+use crate::adapter::shared;
 use crate::app::geosphere::cube;
 use crate::app::geosphere::spectator;
 use crate::app::viewport;
@@ -83,13 +84,15 @@ impl UnsecureConsumerBuilder {
     }
 }
 
+pub type SharedConsumer = shared::Shared<Consumer>;
+
 pub struct Consumer {
     spectator: spectator::Spectator,
     shared_client_context: SharedClientContext,
 }
 
-impl Consumer {
-    pub fn poll(&mut self, p_delta: std::time::Duration) -> anyhow::Result<()> {
+impl super::Pollable for Consumer {
+    fn poll(&mut self, p_delta: std::time::Duration) -> anyhow::Result<()> {
         self.shared_client_context
             .lock()
             .unwrap()
@@ -98,7 +101,9 @@ impl Consumer {
 
         Ok(())
     }
+}
 
+impl Consumer {
     pub fn slot_cube_proxy(&mut self) -> impl spectator::SlotCubeProxy + Clone {
         {
             let shared_client_context = self.shared_client_context.clone();
@@ -159,9 +164,11 @@ impl Consumer {
 
     pub fn spectate(
         &mut self,
+        p_abort_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
         p_camera_properties: &viewport::ViewportCameraProperties,
     ) -> Vec<quad::QuadInstance> {
         let proxy = self.slot_cube_proxy();
-        self.spectator.spectate(proxy, p_camera_properties)
+        self.spectator
+            .spectate(proxy, p_abort_flag, p_camera_properties)
     }
 }

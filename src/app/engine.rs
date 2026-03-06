@@ -1,5 +1,6 @@
 use crate::adapter::renderer;
 use crate::adapter::renderer::*;
+use crate::adapter::shared;
 use crate::app::arch;
 
 use super::geosphere;
@@ -16,30 +17,21 @@ pub fn deserialize_geosphere_texture_image(
         .collect::<Vec<renderer::texture::TextureImage>>()
 }
 
-pub type SharedProvider = std::sync::Arc<std::sync::Mutex<arch::provider::Provider>>;
-pub type SharedConsumer = std::sync::Arc<std::sync::Mutex<arch::consumer::Consumer>>;
-
-impl From<arch::provider::Provider> for SharedProvider {
-    fn from(p_value: arch::provider::Provider) -> Self {
-        std::sync::Arc::new(std::sync::Mutex::new(p_value))
-    }
-}
-
-impl From<arch::consumer::Consumer> for SharedConsumer {
-    fn from(p_value: arch::consumer::Consumer) -> Self {
-        std::sync::Arc::new(std::sync::Mutex::new(p_value))
-    }
-}
+pub type ConsumerHandle = arch::PollHandle<arch::consumer::Consumer>;
+pub type ProviderHandle = arch::PollHandle<arch::provider::Provider>;
 
 #[derive(getset::Getters, getset::MutGetters)]
 pub struct Engine {
     #[getset(get = "pub", get_mut = "pub")]
     viewport: viewport::Viewport,
+    #[getset(get = "pub", get_mut = "pub")]
+    consumer_handle: Option<ConsumerHandle>,
+    #[getset(get = "pub", get_mut = "pub")]
+    provider_handle: Option<ProviderHandle>,
 
     last_process_timestamp: std::time::Instant,
     frame_per_second: u32,
-
-    consumer: SharedConsumer,
+    abort_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 #[derive(partially::Partial)]
@@ -47,6 +39,7 @@ pub struct Engine {
 pub struct UnsecureEngineBuilder {
     pub provider_builder: arch::provider::ProviderBuilder,
     pub consumer_builder: arch::consumer::UnsecureConsumerBuilder,
+    pub poll_interval_duration: std::time::Duration,
 }
 
 pub struct UnsecureEngineBuilderParameters<'a> {
@@ -60,6 +53,7 @@ impl UnsecureEngineBuilder {
         Ok(Self {
             provider_builder: arch::provider::ProviderBuilder::try_with_sample()?,
             consumer_builder: arch::consumer::UnsecureConsumerBuilder::default(),
+            poll_interval_duration: std::time::Duration::from_millis(16),
         })
     }
 
@@ -68,57 +62,39 @@ impl UnsecureEngineBuilder {
         p_parameters: UnsecureEngineBuilderParameters<'a>,
     ) -> anyhow::Result<Engine> {
         let viewport = viewport::Viewport::new(p_parameters.event_loop)?;
-        let provider = SharedProvider::from(
+        let provider = shared::share(
             self.provider_builder
                 .build(p_parameters.provider_builder_parameters),
         );
-        let consumer = SharedConsumer::from(
+        let consumer = shared::share(
             self.consumer_builder
                 .build(p_parameters.consumer_builder_parameters),
         );
-
-        {
-            let polling_provider = provider.clone();
-            tokio::spawn(async move {
-                let delta = std::time::Duration::from_millis(16);
-                let mut interval = tokio::time::interval(delta);
-
-                loop {
-                    let _ = polling_provider.lock().unwrap().poll(delta);
-                    interval.tick().await;
-                }
-            });
-        }
-
-        {
-            let polling_consumer = consumer.clone();
-            tokio::spawn(async move {
-                let delta = std::time::Duration::from_millis(16);
-                let mut interval = tokio::time::interval(delta);
-
-                loop {
-                    let _ = polling_consumer.lock().unwrap().poll(delta);
-                    interval.tick().await;
-                }
-            });
-        }
+        let provider_handle = Some(ProviderHandle::new(provider, self.poll_interval_duration));
+        let consumer_handle = Some(ConsumerHandle::new(consumer, self.poll_interval_duration));
 
         Ok(Engine {
             viewport,
             last_process_timestamp: std::time::Instant::now(),
             frame_per_second: 0,
-            consumer,
+            provider_handle,
+            consumer_handle,
+            abort_flag: Default::default(),
         })
     }
 }
 
 impl Engine {
     pub fn render(&mut self) -> anyhow::Result<()> {
-        let quad_instances = self
-            .consumer
-            .lock()
-            .unwrap()
-            .spectate(&self.viewport.camera_properties());
+        let quad_instances = if let Some(handle) = self.consumer_handle.as_ref() {
+            handle
+                .shared_pollable()
+                .lock()
+                .unwrap()
+                .spectate(self.abort_flag.clone(), &self.viewport.camera_properties())
+        } else {
+            Vec::default()
+        };
 
         let frame_per_second_text = format!("FPS: {}", self.frame_per_second);
         let text = text::Text::new(frame_per_second_text.as_str())
@@ -142,6 +118,14 @@ impl Engine {
         self.frame_per_second = (1.0 / delta.as_secs_f32()) as _;
 
         if p_input.close_requested() {
+            self.abort_flag
+                .store(true, std::sync::atomic::Ordering::Relaxed);
+            if let Some(handle) = self.consumer_handle.as_ref() {
+                handle.shut_down();
+            }
+            if let Some(handle) = self.provider_handle.as_ref() {
+                handle.shut_down();
+            }
             p_event_loop.exit();
             return;
         }

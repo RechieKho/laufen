@@ -2,8 +2,11 @@ use shipyard::IntoIter;
 
 use super::relay;
 use crate::adapter::net;
+use crate::adapter::shared;
 use crate::app::biosphere;
 use crate::app::geosphere;
+
+pub type SharedProvider = shared::Shared<Provider>;
 
 pub struct Provider {
     server_context: net::server::ServerContext,
@@ -55,8 +58,8 @@ impl ProviderBuilder {
     }
 }
 
-impl Provider {
-    pub fn poll(&mut self, p_delta: std::time::Duration) -> anyhow::Result<()> {
+impl super::Pollable for Provider {
+    fn poll(&mut self, p_delta: std::time::Duration) -> anyhow::Result<()> {
         self.server_context
             .update(p_delta)
             .map_err(anyhow::Error::msg)?;
