@@ -2,6 +2,7 @@ use super::relay;
 use crate::adapter::net;
 use crate::adapter::shared;
 use crate::app::geosphere::cube;
+use crate::app::geosphere::slot;
 use crate::app::geosphere::spectator;
 use crate::app::viewport;
 use crate::app::viewport::quad;
@@ -45,6 +46,10 @@ impl std::future::Future for ProviderResponse {
             .receive(self.channel.clone())
         {
             return std::task::Poll::Ready(message);
+        }
+
+        if self.shared_client_context.lock().unwrap().is_disconnected() {
+            return std::task::Poll::Ready(Self::Output::default());
         }
 
         p_cx.waker().wake_by_ref();
@@ -109,6 +114,10 @@ impl Consumer {
             let shared_client_context = self.shared_client_context.clone();
 
             async move |p_position: glam::IVec3| {
+                if !shared_client_context.lock().unwrap().is_connected() {
+                    return (slot::Slot::default(), None);
+                }
+
                 let input_message = Vec::<u8>::default();
                 let input_message = postcard::to_extend(
                     &relay::GeosphereInputMessage {
@@ -128,6 +137,10 @@ impl Consumer {
                 )
                 .await;
 
+                if message.is_empty() {
+                    return (slot::Slot::default(), None);
+                }
+
                 let output_message =
                     postcard::from_bytes::<relay::GeosphereOutputMessage>(&message).unwrap();
 
@@ -137,8 +150,8 @@ impl Consumer {
     }
 
     pub async fn cube_registry(&mut self) -> Option<cube::CubeRegistry> {
-        if !self.shared_client_context.lock().unwrap().is_connected() {
-            return Default::default();
+        if !self.shared_client_context.lock().unwrap().is_disconnected() {
+            return None;
         }
 
         let input_message = Vec::<u8>::default();
@@ -155,6 +168,10 @@ impl Consumer {
         )
         .await;
 
+        if message.is_empty() {
+            return None;
+        }
+
         Some(
             postcard::from_bytes::<relay::CubeRegistryOutputMessage>(&message)
                 .unwrap()
@@ -170,5 +187,9 @@ impl Consumer {
         let proxy = self.slot_cube_proxy();
         self.spectator
             .spectate(proxy, p_abort_flag, p_camera_properties)
+    }
+
+    pub fn disconnect(&mut self) {
+        self.shared_client_context.lock().unwrap().disconnect();
     }
 }

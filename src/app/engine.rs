@@ -121,6 +121,7 @@ impl Engine {
             self.abort_flag
                 .store(true, std::sync::atomic::Ordering::Relaxed);
             if let Some(handle) = self.consumer_handle.as_ref() {
+                handle.shared_pollable().lock().unwrap().disconnect();
                 handle.shut_down();
             }
             if let Some(handle) = self.provider_handle.as_ref() {

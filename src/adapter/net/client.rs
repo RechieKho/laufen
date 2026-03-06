@@ -59,6 +59,14 @@ impl ClientContext {
         self.client.is_connecting()
     }
 
+    pub fn is_disconnected(&self) -> bool {
+        self.client.is_disconnected()
+    }
+
+    pub fn disconnect(&mut self) {
+        self.client.disconnect();
+    }
+
     pub fn receive<C>(&mut self, p_channel_id: C) -> Option<server::Bytes>
     where
         C: Into<u8>,
