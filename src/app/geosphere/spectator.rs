@@ -39,9 +39,7 @@ impl Spectator {
 
     #[inline]
     fn convert_lump_position_to_end_slot_position(p_lump_position: glam::IVec3) -> glam::IVec3 {
-        Self::convert_lump_position_to_begin_slot_position(
-            p_lump_position + glam::IVec3::splat(Self::LUMP_SIZE as _),
-        )
+        Self::convert_lump_position_to_begin_slot_position(p_lump_position + 1)
     }
 
     #[inline]
