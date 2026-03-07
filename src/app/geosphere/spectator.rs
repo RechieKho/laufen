@@ -32,8 +32,15 @@ impl Spectator {
     }
 
     #[inline]
-    fn convert_lump_position_to_slot_position(p_lump_position: glam::IVec3) -> glam::IVec3 {
+    fn convert_lump_position_to_begin_slot_position(p_lump_position: glam::IVec3) -> glam::IVec3 {
         p_lump_position * Self::LUMP_SIZE as i32
+    }
+
+    #[inline]
+    fn convert_lump_position_to_end_slot_position(p_lump_position: glam::IVec3) -> glam::IVec3 {
+        Self::convert_lump_position_to_begin_slot_position(
+            p_lump_position + glam::IVec3::splat(Self::LUMP_SIZE as _),
+        )
     }
 
     #[inline]
@@ -41,8 +48,8 @@ impl Spectator {
         p_lump_position: glam::IVec3,
     ) -> point_cluster::PointCluster {
         point_cluster::PointCluster {
-            min: Self::convert_lump_position_to_slot_position(p_lump_position),
-            max: Self::convert_lump_position_to_slot_position(p_lump_position + 1),
+            min: Self::convert_lump_position_to_begin_slot_position(p_lump_position),
+            max: Self::convert_lump_position_to_end_slot_position(p_lump_position),
         }
     }
 
