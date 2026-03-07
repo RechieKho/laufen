@@ -118,18 +118,12 @@ impl Consumer {
                     return (slot::Slot::default(), None);
                 }
 
-                let input_message = Vec::<u8>::default();
-                let input_message = postcard::to_extend(
+                shared_client_context.lock().unwrap().send_serializable(
+                    relay::RelayChannel::Geosphere,
                     &relay::GeosphereInputMessage {
                         position: p_position,
                     },
-                    input_message,
-                )
-                .unwrap();
-                shared_client_context
-                    .lock()
-                    .unwrap()
-                    .send(relay::RelayChannel::Geosphere, input_message);
+                );
 
                 let message = ProviderResponse::new(
                     shared_client_context.clone(),
@@ -154,13 +148,13 @@ impl Consumer {
             return None;
         }
 
-        let input_message = Vec::<u8>::default();
-        let input_message =
-            postcard::to_extend(&relay::CubeRegistryInputMessage(), input_message).unwrap();
         self.shared_client_context
             .lock()
             .unwrap()
-            .send(relay::RelayChannel::CubeRegistry, input_message);
+            .send_serializable(
+                relay::RelayChannel::CubeRegistry,
+                &relay::CubeRegistryInputMessage(),
+            );
 
         let message = ProviderResponse::new(
             self.shared_client_context.clone(),

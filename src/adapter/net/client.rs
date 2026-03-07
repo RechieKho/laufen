@@ -82,6 +82,16 @@ impl ClientContext {
         self.client.send_message(p_channel_id, p_message);
     }
 
+    pub fn send_serializable<C, S>(&mut self, p_channel_id: C, p_serializable: &S)
+    where
+        C: Into<u8>,
+        S: serde::Serialize + ?Sized,
+    {
+        let message = Vec::<u8>::default();
+        let message = postcard::to_extend(p_serializable, message).unwrap();
+        self.send(p_channel_id, message);
+    }
+
     pub fn update(
         &mut self,
         p_delta: time::Duration,
