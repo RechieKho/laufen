@@ -7,7 +7,7 @@ use super::geosphere;
 use super::viewport;
 
 pub fn deserialize_geosphere_texture_image(
-    p_geosphere: &geosphere::Geosphere,
+    p_geosphere: &geosphere::active_geosphere::ActiveGeosphere,
 ) -> Vec<renderer::texture::TextureImage> {
     p_geosphere
         .cube_registry()

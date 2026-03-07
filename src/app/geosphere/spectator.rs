@@ -3,6 +3,7 @@ use crate::app::viewport;
 use crate::app::viewport::quad;
 use parry3d::query::PointQuery;
 
+use super::active_geosphere;
 use super::cube;
 use super::point_cluster;
 use super::slot;
@@ -254,7 +255,7 @@ impl Spectator {
 
     pub fn spectate_geosphere(
         &mut self,
-        p_shared_geosphere: super::SharedGeosphere,
+        p_shared_geosphere: active_geosphere::SharedActiveGeosphere,
         p_abort_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
         p_camera_properties: &viewport::ViewportCameraProperties,
     ) -> Vec<quad::QuadInstance> {

@@ -12,7 +12,7 @@ pub type SharedProvider = shared::Shared<Provider>;
 pub struct Provider {
     server_context: net::server::ServerContext,
     #[allow(unused)]
-    geosphere: geosphere::Geosphere,
+    geosphere: geosphere::active_geosphere::ActiveGeosphere,
     biosphere: biosphere::Biosphere,
 }
 
@@ -24,7 +24,7 @@ pub struct ProviderBuilder {
     pub server_overriding_protocol_id: Option<u64>,
     pub server_authentication: net::server::ServerAuthentication,
     pub connection_available_bytes_per_tick: u64,
-    pub geosphere_builder: geosphere::GeosphereBuilder,
+    pub geosphere_builder: geosphere::active_geosphere::ActiveGeosphereBuilder,
 }
 
 pub struct ProviderBuilderParameters {
@@ -38,7 +38,8 @@ impl ProviderBuilder {
             server_overriding_current_time: None,
             server_overriding_protocol_id: None,
             server_authentication: net::server::ServerAuthentication::Unsecure,
-            geosphere_builder: geosphere::GeosphereBuilder::try_with_sample()?,
+            geosphere_builder:
+                geosphere::active_geosphere::ActiveGeosphereBuilder::try_with_sample()?,
             connection_available_bytes_per_tick: 60_000,
         })
     }
