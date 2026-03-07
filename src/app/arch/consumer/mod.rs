@@ -7,56 +7,6 @@ use crate::app::geosphere::spectator;
 use crate::app::viewport;
 use crate::app::viewport::quad;
 
-pub type SharedClientContext = std::sync::Arc<std::sync::Mutex<net::client::ClientContext>>;
-
-impl From<net::client::ClientContext> for SharedClientContext {
-    fn from(p_value: net::client::ClientContext) -> Self {
-        std::sync::Arc::new(std::sync::Mutex::new(p_value))
-    }
-}
-
-pub struct ProviderResponse {
-    shared_client_context: SharedClientContext,
-    channel: relay::RelayChannel,
-}
-
-impl ProviderResponse {
-    pub fn new(
-        p_shared_client_context: SharedClientContext,
-        p_channel: relay::RelayChannel,
-    ) -> Self {
-        Self {
-            shared_client_context: p_shared_client_context,
-            channel: p_channel,
-        }
-    }
-}
-
-impl std::future::Future for ProviderResponse {
-    type Output = net::server::Bytes;
-
-    fn poll(
-        self: std::pin::Pin<&mut Self>,
-        p_cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Self::Output> {
-        if let Some(message) = self
-            .shared_client_context
-            .lock()
-            .unwrap()
-            .receive(self.channel.clone())
-        {
-            return std::task::Poll::Ready(message);
-        }
-
-        if self.shared_client_context.lock().unwrap().is_disconnected() {
-            return std::task::Poll::Ready(Self::Output::default());
-        }
-
-        p_cx.waker().wake_by_ref();
-        std::task::Poll::Pending
-    }
-}
-
 #[derive(partially::Partial, Default)]
 #[partially(derive(Default))]
 pub struct UnsecureConsumerBuilder {
@@ -78,7 +28,7 @@ impl UnsecureConsumerBuilder {
             connection_config: relay::RelayChannel::connection_config(),
         };
 
-        let shared_client_context = SharedClientContext::from(
+        let shared_client_context = net::client::SharedClientContext::from(
             client_context_builder.build(p_parameters.client_context_builder_parameters),
         );
 
@@ -93,7 +43,7 @@ pub type SharedConsumer = shared::Shared<Consumer>;
 
 pub struct Consumer {
     spectator: spectator::Spectator,
-    shared_client_context: SharedClientContext,
+    shared_client_context: net::client::SharedClientContext,
 }
 
 impl super::Pollable for Consumer {
@@ -125,7 +75,7 @@ impl Consumer {
                     },
                 );
 
-                let message = ProviderResponse::new(
+                let message = net::client::ServerResponse::new(
                     shared_client_context.clone(),
                     relay::RelayChannel::Geosphere,
                 )
@@ -156,7 +106,7 @@ impl Consumer {
                 &relay::CubeRegistryInputMessage(),
             );
 
-        let message = ProviderResponse::new(
+        let message = net::client::ServerResponse::new(
             self.shared_client_context.clone(),
             relay::RelayChannel::CubeRegistry,
         )

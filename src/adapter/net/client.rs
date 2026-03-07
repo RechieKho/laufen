@@ -1,6 +1,15 @@
 use super::server;
+use crate::adapter::shared;
 use std::net;
 use std::time;
+
+pub type SharedClientContext = shared::Shared<ClientContext>;
+
+impl From<ClientContext> for SharedClientContext {
+    fn from(p_value: ClientContext) -> Self {
+        std::sync::Arc::new(std::sync::Mutex::new(p_value))
+    }
+}
 
 pub struct ClientContext {
     client: renet::RenetClient,
@@ -102,5 +111,47 @@ impl ClientContext {
             self.transport.send_packets(&mut self.client)?;
         }
         Ok(())
+    }
+}
+
+pub struct ServerResponse {
+    shared_client_context: SharedClientContext,
+    channel: u8,
+}
+
+impl ServerResponse {
+    pub fn new<C>(p_shared_client_context: SharedClientContext, p_channel: C) -> Self
+    where
+        C: Into<u8>,
+    {
+        Self {
+            shared_client_context: p_shared_client_context,
+            channel: p_channel.into(),
+        }
+    }
+}
+
+impl std::future::Future for ServerResponse {
+    type Output = server::Bytes;
+
+    fn poll(
+        self: std::pin::Pin<&mut Self>,
+        p_cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
+        if let Some(message) = self
+            .shared_client_context
+            .lock()
+            .unwrap()
+            .receive(self.channel)
+        {
+            return std::task::Poll::Ready(message);
+        }
+
+        if self.shared_client_context.lock().unwrap().is_disconnected() {
+            return std::task::Poll::Ready(Self::Output::default());
+        }
+
+        p_cx.waker().wake_by_ref();
+        std::task::Poll::Pending
     }
 }
