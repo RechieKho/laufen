@@ -97,15 +97,11 @@ impl super::Pollable for Provider {
 
                 let (slot, cube) = self.geosphere.slot_cube(message.position);
 
-                let output_message = Vec::<u8>::default();
-                let output_message = postcard::to_extend(
+                self.server_context.send_serializable(
+                    id,
+                    relay::RelayChannel::Geosphere,
                     &relay::GeosphereOutputMessage { slot: *slot, cube },
-                    output_message,
-                )
-                .unwrap();
-
-                self.server_context
-                    .send(id, relay::RelayChannel::Geosphere, output_message);
+                );
             }
 
             if self
@@ -113,17 +109,13 @@ impl super::Pollable for Provider {
                 .receive_from(id, relay::RelayChannel::CubeRegistry)
                 .is_some()
             {
-                let output_message = Vec::<u8>::default();
-                let output_message = postcard::to_extend(
+                self.server_context.send_serializable(
+                    id,
+                    relay::RelayChannel::Geosphere,
                     &relay::CubeRegistryOutputMessage {
                         cube_registry: self.geosphere.cube_registry().clone(),
                     },
-                    output_message,
-                )
-                .unwrap();
-
-                self.server_context
-                    .send(id, relay::RelayChannel::CubeRegistry, output_message);
+                );
             }
         }
 

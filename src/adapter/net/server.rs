@@ -80,12 +80,36 @@ impl ServerContext {
             .send_message(p_client_id, p_channel_id, p_message)
     }
 
+    pub fn send_serializable<C, S>(
+        &mut self,
+        p_client_id: ClientId,
+        p_channel_id: C,
+        p_serializable: &S,
+    ) where
+        C: Into<u8>,
+        S: serde::Serialize + ?Sized,
+    {
+        let message = Vec::<u8>::default();
+        let message = postcard::to_extend(p_serializable, message).unwrap();
+        self.send(p_client_id, p_channel_id, message);
+    }
+
     pub fn send_all<C, M>(&mut self, p_channel_id: C, p_message: M)
     where
         C: Into<u8>,
         M: Into<Bytes>,
     {
         self.server.broadcast_message(p_channel_id, p_message)
+    }
+
+    pub fn send_serializable_all<C, S>(&mut self, p_channel_id: C, p_serializable: &S)
+    where
+        C: Into<u8>,
+        S: serde::Serialize + ?Sized,
+    {
+        let message = Vec::<u8>::default();
+        let message = postcard::to_extend(p_serializable, message).unwrap();
+        self.send_all(p_channel_id, message)
     }
 
     pub fn send_all_except<C, M>(
@@ -99,6 +123,21 @@ impl ServerContext {
     {
         self.server
             .broadcast_message_except(p_except_client_id, p_channel_id, p_message)
+    }
+
+    pub fn send_serializable_all_except<C, S>(
+        &mut self,
+        p_except_client_id: ClientId,
+        p_channel_id: C,
+        p_serializable: &S,
+    ) where
+        C: Into<u8>,
+        S: serde::Serialize + ?Sized,
+    {
+        let message = Vec::<u8>::default();
+        let message = postcard::to_extend(p_serializable, message).unwrap();
+        self.server
+            .broadcast_message_except(p_except_client_id, p_channel_id, message)
     }
 
     pub fn get_client_ids(&self) -> Vec<ClientId> {
