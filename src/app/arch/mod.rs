@@ -2,7 +2,6 @@ use crate::adapter::shared;
 
 pub mod consumer;
 pub mod provider;
-pub mod relay;
 
 pub trait Pollable {
     fn poll(&mut self, p_delta: std::time::Duration) -> anyhow::Result<()>;

@@ -1,10 +1,11 @@
-use shipyard::IntoIter;
+pub mod channel;
 
-use super::relay;
+use super::consumer;
 use crate::adapter::net;
 use crate::adapter::shared;
 use crate::app::biosphere;
 use crate::app::geosphere;
+use shipyard::IntoIter;
 
 pub type SharedProvider = shared::Shared<Provider>;
 
@@ -22,6 +23,7 @@ pub struct ProviderBuilder {
     pub server_overriding_current_time: Option<std::time::Duration>,
     pub server_overriding_protocol_id: Option<u64>,
     pub server_authentication: net::server::ServerAuthentication,
+    pub connection_available_bytes_per_tick: u64,
     pub geosphere_builder: geosphere::GeosphereBuilder,
 }
 
@@ -37,6 +39,7 @@ impl ProviderBuilder {
             server_overriding_protocol_id: None,
             server_authentication: net::server::ServerAuthentication::Unsecure,
             geosphere_builder: geosphere::GeosphereBuilder::try_with_sample()?,
+            connection_available_bytes_per_tick: 60_000,
         })
     }
 
@@ -46,7 +49,11 @@ impl ProviderBuilder {
             overriding_current_time: self.server_overriding_current_time,
             overriding_protocol_id: self.server_overriding_protocol_id,
             authentication: self.server_authentication,
-            connection_config: relay::RelayChannel::connection_config(),
+            connection_config: net::server::ConnectionConfig {
+                available_bytes_per_tick: self.connection_available_bytes_per_tick,
+                server_channels_config: channel::Channel::channels_config(),
+                client_channels_config: consumer::channel::Channel::channels_config(),
+            },
         };
 
         Provider {
@@ -90,29 +97,28 @@ impl super::Pollable for Provider {
         for id in self.server_context.get_client_ids() {
             while let Some(message) = self
                 .server_context
-                .receive_from(id, relay::RelayChannel::Geosphere)
+                .receive_from(id, channel::Channel::Geosphere)
             {
-                let message =
-                    postcard::from_bytes::<relay::GeosphereInputMessage>(&message).unwrap();
+                let message = postcard::from_bytes::<channel::GeosphereMessage>(&message).unwrap();
 
                 let (slot, cube) = self.geosphere.slot_cube(message.position);
 
                 self.server_context.send_serializable(
                     id,
-                    relay::RelayChannel::Geosphere,
-                    &relay::GeosphereOutputMessage { slot: *slot, cube },
+                    consumer::channel::Channel::Geosphere,
+                    &consumer::channel::GeosphereMessage { slot: *slot, cube },
                 );
             }
 
             if self
                 .server_context
-                .receive_from(id, relay::RelayChannel::CubeRegistry)
+                .receive_from(id, channel::Channel::CubeRegistry)
                 .is_some()
             {
                 self.server_context.send_serializable(
                     id,
-                    relay::RelayChannel::Geosphere,
-                    &relay::CubeRegistryOutputMessage {
+                    consumer::channel::Channel::Geosphere,
+                    &consumer::channel::CubeRegistryMessage {
                         cube_registry: self.geosphere.cube_registry().clone(),
                     },
                 );

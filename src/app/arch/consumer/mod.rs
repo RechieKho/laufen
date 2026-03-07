@@ -1,4 +1,6 @@
-use super::relay;
+pub mod channel;
+
+use super::provider;
 use crate::adapter::net;
 use crate::adapter::shared;
 use crate::app::geosphere::cube;
@@ -7,12 +9,24 @@ use crate::app::geosphere::spectator;
 use crate::app::viewport;
 use crate::app::viewport::quad;
 
-#[derive(partially::Partial, Default)]
+#[derive(partially::Partial)]
 #[partially(derive(Default))]
 pub struct UnsecureConsumerBuilder {
     pub client_overriding_current_time: Option<std::time::Duration>,
     pub client_overriding_protocol_id: Option<u64>,
     pub client_user_data: Option<[u8; renet_netcode::NETCODE_USER_DATA_BYTES]>,
+    pub connection_available_bytes_per_tick: u64,
+}
+
+impl Default for UnsecureConsumerBuilder {
+    fn default() -> Self {
+        Self {
+            client_overriding_current_time: None,
+            client_overriding_protocol_id: None,
+            client_user_data: None,
+            connection_available_bytes_per_tick: 60_000,
+        }
+    }
 }
 
 pub struct UnsecureConsumerBuilderParameters {
@@ -25,7 +39,11 @@ impl UnsecureConsumerBuilder {
             overriding_current_time: self.client_overriding_current_time,
             overriding_protocol_id: self.client_overriding_protocol_id,
             user_data: self.client_user_data,
-            connection_config: relay::RelayChannel::connection_config(),
+            connection_config: net::server::ConnectionConfig {
+                available_bytes_per_tick: self.connection_available_bytes_per_tick,
+                server_channels_config: provider::channel::Channel::channels_config(),
+                client_channels_config: channel::Channel::channels_config(),
+            },
         };
 
         let shared_client_context = net::client::SharedClientContext::from(
@@ -69,15 +87,15 @@ impl Consumer {
                 }
 
                 shared_client_context.lock().unwrap().send_serializable(
-                    relay::RelayChannel::Geosphere,
-                    &relay::GeosphereInputMessage {
+                    provider::channel::Channel::Geosphere,
+                    &provider::channel::GeosphereMessage {
                         position: p_position,
                     },
                 );
 
                 let message = net::client::ServerResponse::new(
                     shared_client_context.clone(),
-                    relay::RelayChannel::Geosphere,
+                    channel::Channel::Geosphere,
                 )
                 .await;
 
@@ -86,7 +104,7 @@ impl Consumer {
                 }
 
                 let output_message =
-                    postcard::from_bytes::<relay::GeosphereOutputMessage>(&message).unwrap();
+                    postcard::from_bytes::<channel::GeosphereMessage>(&message).unwrap();
 
                 (output_message.slot, output_message.cube)
             }
@@ -102,13 +120,13 @@ impl Consumer {
             .lock()
             .unwrap()
             .send_serializable(
-                relay::RelayChannel::CubeRegistry,
-                &relay::CubeRegistryInputMessage(),
+                provider::channel::Channel::CubeRegistry,
+                &provider::channel::CubeRegistryMessage(),
             );
 
         let message = net::client::ServerResponse::new(
             self.shared_client_context.clone(),
-            relay::RelayChannel::CubeRegistry,
+            channel::Channel::CubeRegistry,
         )
         .await;
 
@@ -116,11 +134,11 @@ impl Consumer {
             return None;
         }
 
-        Some(
-            postcard::from_bytes::<relay::CubeRegistryOutputMessage>(&message)
-                .unwrap()
-                .cube_registry,
-        )
+        let cube_registry = postcard::from_bytes::<channel::CubeRegistryMessage>(&message)
+            .unwrap()
+            .cube_registry;
+
+        Some(cube_registry)
     }
 
     pub fn spectate(
