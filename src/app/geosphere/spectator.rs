@@ -287,4 +287,17 @@ impl Spectator {
     pub fn purge_all(&mut self) {
         self.lump.lock().unwrap().clear();
     }
+
+    pub fn purge_slot_point_cluster(&mut self, p_point_cluster: point_cluster::PointCluster) {
+        let lump_min = Self::convert_slot_position_to_lump_position(p_point_cluster.min);
+        let lump_max = Self::convert_slot_position_to_lump_position(p_point_cluster.max);
+        let lump_cluster = point_cluster::PointCluster {
+            min: lump_min,
+            max: lump_max,
+        };
+        let mut lump = self.lump.lock().unwrap();
+        for lump_point in lump_cluster {
+            lump.remove(&lump_point);
+        }
+    }
 }

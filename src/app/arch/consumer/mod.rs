@@ -4,6 +4,7 @@ use super::provider;
 use crate::adapter::net;
 use crate::adapter::shared;
 use crate::app::geosphere;
+use crate::app::geosphere::morton::Morton;
 use crate::app::geosphere::spectator;
 use crate::app::viewport;
 use crate::app::viewport::quad;
@@ -87,13 +88,16 @@ impl super::pollable::Pollable for Consumer {
             .receive_deserializable::<provider::channel::ChunkInsertionMessage, _>(
             provider::channel::Channel::ChunkInsertion,
         ) {
+            let chunk_position = *message.key;
+            let chunk_slot_point_cluster =
+                geosphere::chunk::ChunkMorton::compute_cluster(chunk_position);
             self.geosphere
                 .lock()
                 .unwrap()
                 .chunk_map
                 .insert(message.key, message.chunk);
-            // TODO: Please just purge specific chunk for recaching.
-            self.spectator.purge_all();
+            self.spectator
+                .purge_slot_point_cluster(chunk_slot_point_cluster);
         }
 
         Ok(())
