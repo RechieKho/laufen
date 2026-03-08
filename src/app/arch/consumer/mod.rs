@@ -3,6 +3,7 @@ pub mod channel;
 use super::provider;
 use crate::adapter::net;
 use crate::adapter::shared;
+use crate::app::geosphere;
 use crate::app::geosphere::cube;
 use crate::app::geosphere::slot;
 use crate::app::geosphere::spectator;
@@ -50,7 +51,15 @@ impl UnsecureConsumerBuilder {
             client_context_builder.build(p_parameters.client_context_builder_parameters),
         );
 
+        // TODO: Need to fetch from provider.
+        let geosphere = geosphere::passive_geosphere::SharedPassiveGeosphere::default();
+        geosphere.lock().unwrap().cube_registry =
+            geosphere::cube::CubeRegistryBuilder::try_with_sample()
+                .unwrap()
+                .build();
+
         Consumer {
+            geosphere,
             spectator: spectator::Spectator::default(),
             shared_client_context,
         }
@@ -60,6 +69,7 @@ impl UnsecureConsumerBuilder {
 pub type SharedConsumer = shared::Shared<Consumer>;
 
 pub struct Consumer {
+    geosphere: geosphere::passive_geosphere::SharedPassiveGeosphere,
     spectator: spectator::Spectator,
     shared_client_context: net::client::SharedClientContext,
 }
@@ -72,43 +82,56 @@ impl super::Pollable for Consumer {
             .update(p_delta)
             .map_err(anyhow::Error::msg)?;
 
+        while let Some(message) = self
+            .shared_client_context
+            .lock()
+            .unwrap()
+            .receive_deserializable::<provider::channel::ChunkInsertionMessage, _>(
+            provider::channel::Channel::ChunkInsertion,
+        ) {
+            self.geosphere
+                .lock()
+                .unwrap()
+                .chunk_map
+                .insert(message.key, message.chunk);
+            // TODO: Please just purge specific chunk for recaching.
+            self.spectator.purge_all();
+        }
+
         Ok(())
     }
 }
 
 impl Consumer {
-    pub fn slot_cube_proxy(&mut self) -> impl spectator::SlotCubeProxy + Clone {
-        {
-            let shared_client_context = self.shared_client_context.clone();
-
-            async move |p_position: glam::IVec3| {
-                if !shared_client_context.lock().unwrap().is_connected() {
-                    return (slot::Slot::default(), None);
-                }
-
-                shared_client_context.lock().unwrap().send_serializable(
-                    provider::channel::Channel::Geosphere,
-                    &provider::channel::GeosphereMessage {
-                        position: p_position,
-                    },
-                );
-
-                let message = net::client::ServerResponse::new(
-                    shared_client_context.clone(),
-                    channel::Channel::Geosphere,
-                )
-                .await;
-
-                if message.is_empty() {
-                    return (slot::Slot::default(), None);
-                }
-
-                let output_message =
-                    postcard::from_bytes::<channel::GeosphereMessage>(&message).unwrap();
-
-                (output_message.slot, output_message.cube)
-            }
+    pub async fn slot_cube(&mut self, p_position: glam::IVec3) -> (slot::Slot, Option<cube::Cube>) {
+        if !self.shared_client_context.lock().unwrap().is_connected() {
+            return (slot::Slot::default(), None);
         }
+
+        self.shared_client_context
+            .lock()
+            .unwrap()
+            .send_serializable(
+                channel::Channel::Geosphere,
+                &channel::GeosphereMessage {
+                    position: p_position,
+                },
+            );
+
+        let message = net::client::ServerResponse::new(
+            self.shared_client_context.clone(),
+            channel::Channel::Geosphere,
+        )
+        .await;
+
+        if message.is_empty() {
+            return (slot::Slot::default(), None);
+        }
+
+        let output_message =
+            postcard::from_bytes::<provider::channel::GeosphereMessage>(&message).unwrap();
+
+        (output_message.slot, output_message.cube)
     }
 
     pub async fn cube_registry(&mut self) -> Option<cube::CubeRegistry> {
@@ -120,8 +143,8 @@ impl Consumer {
             .lock()
             .unwrap()
             .send_serializable(
-                provider::channel::Channel::CubeRegistry,
-                &provider::channel::CubeRegistryMessage(),
+                channel::Channel::CubeRegistry,
+                &channel::CubeRegistryMessage(),
             );
 
         let message = net::client::ServerResponse::new(
@@ -134,9 +157,10 @@ impl Consumer {
             return None;
         }
 
-        let cube_registry = postcard::from_bytes::<channel::CubeRegistryMessage>(&message)
-            .unwrap()
-            .cube_registry;
+        let cube_registry =
+            postcard::from_bytes::<provider::channel::CubeRegistryMessage>(&message)
+                .unwrap()
+                .cube_registry;
 
         Some(cube_registry)
     }
@@ -146,9 +170,8 @@ impl Consumer {
         p_abort_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
         p_camera_properties: &viewport::ViewportCameraProperties,
     ) -> Vec<quad::QuadInstance> {
-        let proxy = self.slot_cube_proxy();
         self.spectator
-            .spectate(proxy, p_abort_flag, p_camera_properties)
+            .spectate_geosphere(self.geosphere.clone(), p_abort_flag, p_camera_properties)
     }
 
     pub fn disconnect(&mut self) {

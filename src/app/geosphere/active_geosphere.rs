@@ -1,9 +1,10 @@
-use super::morton::Morton;
-
 use super::chunk;
 use super::cube;
+use super::morton::Morton;
 use super::point_cluster;
 use super::slot;
+use super::Geosphere;
+use crate::adapter::shared;
 
 #[derive(partially::Partial)]
 #[partially(derive(Default))]
@@ -32,11 +33,11 @@ impl ActiveGeosphereBuilder {
     }
 }
 
-pub type SharedActiveGeosphere = std::sync::Arc<std::sync::Mutex<ActiveGeosphere>>;
+pub type SharedActiveGeosphere = shared::Shared<ActiveGeosphere>;
 
 impl From<ActiveGeosphere> for SharedActiveGeosphere {
     fn from(p_value: ActiveGeosphere) -> Self {
-        std::sync::Arc::new(std::sync::Mutex::new(p_value))
+        shared::share(p_value)
     }
 }
 
@@ -50,9 +51,30 @@ pub struct ActiveGeosphere {
     cube_registry: cube::CubeRegistry,
 }
 
-unsafe impl Send for ActiveGeosphere {}
+impl super::Geosphere for ActiveGeosphere {
+    fn slot(&mut self, p_position: glam::IVec3) -> &mut slot::Slot {
+        let (code, remained) = chunk::ChunkMorton::consume(p_position);
+        let key = chunk::ChunkKey::from(remained);
+        let chunk = self.chunk(&key);
+        let slot = chunk.get_mut(code);
+        slot
+    }
 
-unsafe impl Sync for ActiveGeosphere {}
+    fn slot_cube(&mut self, p_position: glam::IVec3) -> (&mut slot::Slot, Option<cube::Cube>) {
+        let (code, remained) = chunk::ChunkMorton::consume(p_position);
+        let key = chunk::ChunkKey::from(remained);
+        if !self.chunk_map.contains_key(&key) {
+            self.load(key);
+        }
+        let chunk = self.chunk_map.get_mut(&key).unwrap();
+        let cube = chunk
+            .get(code)
+            .cube_instance
+            .and_then(|cube_instance| self.cube_registry.cubes().get(&cube_instance.id).cloned());
+        let slot = chunk.get_mut(code);
+        (slot, cube)
+    }
+}
 
 impl ActiveGeosphere {
     fn bake_hidden_face(&mut self, p_position: glam::IVec3) {
@@ -156,6 +178,13 @@ impl ActiveGeosphere {
         self.bake_multiple_hidden_face(point_cluster);
     }
 
+    pub fn chunk(&mut self, p_key: &chunk::ChunkKey) -> &mut chunk::Chunk {
+        if !self.chunk_map.contains_key(p_key) {
+            self.load(*p_key);
+        }
+        self.chunk_map.get_mut(p_key).unwrap()
+    }
+
     pub fn purge_beyond(
         &mut self,
         p_slot_position: glam::IVec3,
@@ -172,31 +201,5 @@ impl ActiveGeosphere {
             let _ = self.saver.save_chunk(*p_iter_key, p_iter_chunk);
             false
         });
-    }
-
-    pub fn slot(&mut self, p_position: glam::IVec3) -> &mut slot::Slot {
-        let (code, remained) = chunk::ChunkMorton::consume(p_position);
-        let key = chunk::ChunkKey::from(remained);
-        if !self.chunk_map.contains_key(&key) {
-            self.load(key);
-        }
-        let slot = self.chunk_map.get_mut(&key).unwrap().get_mut(code);
-        slot
-    }
-
-    pub fn slot_cube(&mut self, p_position: glam::IVec3) -> (&mut slot::Slot, Option<cube::Cube>) {
-        let (code, remained) = chunk::ChunkMorton::consume(p_position);
-        let key = chunk::ChunkKey::from(remained);
-        if !self.chunk_map.contains_key(&key) {
-            self.load(key);
-        }
-        let cube = self
-            .chunk_map
-            .get(&key)
-            .map(|chunk| chunk.get(code))
-            .and_then(|slot| slot.cube_instance)
-            .and_then(|cube_instance| self.cube_registry.cubes().get(&cube_instance.id).cloned());
-        let slot = self.chunk_map.get_mut(&key).unwrap().get_mut(code);
-        (slot, cube)
     }
 }

@@ -83,6 +83,15 @@ impl ClientContext {
         self.client.receive_message(p_channel_id)
     }
 
+    pub fn receive_deserializable<D, C>(&mut self, p_channel_id: C) -> Option<D>
+    where
+        D: serde::de::DeserializeOwned,
+        C: Into<u8>,
+    {
+        self.receive(p_channel_id)
+            .map(|p_bytes| postcard::from_bytes::<D>(&p_bytes).unwrap())
+    }
+
     pub fn send<C, M>(&mut self, p_channel_id: C, p_message: M)
     where
         C: Into<u8>,

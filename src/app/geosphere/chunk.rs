@@ -3,7 +3,7 @@ use super::morton;
 use super::morton::Morton;
 use super::slot;
 
-#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ChunkKey(glam::IVec3);
 
 impl From<glam::IVec3> for ChunkKey {
@@ -71,17 +71,19 @@ pub struct ChunkLoadData {
     pub require_hidden_face_baking: bool,
 }
 
-pub trait ChunkLoader {
+pub trait ChunkLoader: Send + Sync {
     fn load_chunk(&mut self, p_key: ChunkKey) -> anyhow::Result<ChunkLoadData>;
 }
 
-pub trait ChunkSaver {
+pub trait ChunkSaver: Send + Sync {
     fn save_chunk(&mut self, p_key: ChunkKey, p_chunk: &Chunk) -> anyhow::Result<()>;
 }
 
 pub type ChunkMorton = morton::Morton4;
 
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct Chunk {
+    #[serde(with = "serde_arrays")]
     slots: [slot::Slot; ChunkMorton::MAX as _],
 }
 

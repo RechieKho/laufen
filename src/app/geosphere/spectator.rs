@@ -3,7 +3,6 @@ use crate::app::viewport;
 use crate::app::viewport::quad;
 use parry3d::query::PointQuery;
 
-use super::active_geosphere;
 use super::cube;
 use super::point_cluster;
 use super::slot;
@@ -253,7 +252,7 @@ impl Spectator {
 
     pub fn spectate_geosphere(
         &mut self,
-        p_shared_geosphere: active_geosphere::SharedActiveGeosphere,
+        p_shared_geosphere: super::SharedGeosphere,
         p_abort_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
         p_camera_properties: &viewport::ViewportCameraProperties,
     ) -> Vec<quad::QuadInstance> {
@@ -283,5 +282,9 @@ impl Spectator {
             let distance = lump_position.chebyshev_distance(*p_key);
             distance < max_chebyshev_lump_distance
         })
+    }
+
+    pub fn purge_all(&mut self) {
+        self.lump.lock().unwrap().clear();
     }
 }

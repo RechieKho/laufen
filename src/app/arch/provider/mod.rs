@@ -5,6 +5,7 @@ use crate::adapter::net;
 use crate::adapter::shared;
 use crate::app::biosphere;
 use crate::app::geosphere;
+use crate::app::geosphere::Geosphere;
 use shipyard::IntoIter;
 
 pub type SharedProvider = shared::Shared<Provider>;
@@ -78,7 +79,27 @@ impl super::Pollable for Provider {
                     self.biosphere
                         .entities_mut()
                         .add_entity(biosphere::player::Player::new(client_id));
+
+                    // TODO: I think it wouldn't be too nice only give a chunk of the world only.
+                    // This should be dynamically given based on the client's position.
+                    // Moreover, it should keep a list of cluster that the player is registered to,
+                    // So to only send to players the updates it need for the modified chunk.
+                    let cluster = geosphere::point_cluster::PointCluster {
+                        min: glam::IVec3::new(-5, -5, -5),
+                        max: glam::IVec3::new(5, 5, 5),
+                    };
+
+                    for point in cluster {
+                        let key = geosphere::chunk::ChunkKey::from(point);
+                        let chunk = self.geosphere.chunk(&key).clone();
+                        self.server_context.send_serializable(
+                            client_id,
+                            channel::Channel::ChunkInsertion,
+                            &channel::ChunkInsertionMessage { chunk, key },
+                        );
+                    }
                 }
+
                 net::server::ServerEvent::ClientDisconnected {
                     client_id,
                     reason: _,
@@ -100,14 +121,15 @@ impl super::Pollable for Provider {
                 .server_context
                 .receive_from(id, channel::Channel::Geosphere)
             {
-                let message = postcard::from_bytes::<channel::GeosphereMessage>(&message).unwrap();
+                let message =
+                    postcard::from_bytes::<consumer::channel::GeosphereMessage>(&message).unwrap();
 
                 let (slot, cube) = self.geosphere.slot_cube(message.position);
 
                 self.server_context.send_serializable(
                     id,
-                    consumer::channel::Channel::Geosphere,
-                    &consumer::channel::GeosphereMessage { slot: *slot, cube },
+                    channel::Channel::Geosphere,
+                    &channel::GeosphereMessage { slot: *slot, cube },
                 );
             }
 
@@ -118,8 +140,8 @@ impl super::Pollable for Provider {
             {
                 self.server_context.send_serializable(
                     id,
-                    consumer::channel::Channel::Geosphere,
-                    &consumer::channel::CubeRegistryMessage {
+                    channel::Channel::Geosphere,
+                    &channel::CubeRegistryMessage {
                         cube_registry: self.geosphere.cube_registry().clone(),
                     },
                 );
