@@ -5,7 +5,6 @@ use crate::adapter::net;
 use crate::adapter::shared;
 use crate::app::biosphere;
 use crate::app::geosphere;
-use crate::app::geosphere::Geosphere;
 use shipyard::IntoIter;
 
 pub type SharedProvider = shared::Shared<Provider>;
@@ -113,38 +112,6 @@ impl super::Pollable for Provider {
                         }
                     },
                 ),
-            }
-        }
-
-        for id in self.server_context.get_client_ids() {
-            while let Some(message) = self
-                .server_context
-                .receive_from(id, channel::Channel::Geosphere)
-            {
-                let message =
-                    postcard::from_bytes::<consumer::channel::GeosphereMessage>(&message).unwrap();
-
-                let (slot, cube) = self.geosphere.slot_cube(message.position);
-
-                self.server_context.send_serializable(
-                    id,
-                    channel::Channel::Geosphere,
-                    &channel::GeosphereMessage { slot: *slot, cube },
-                );
-            }
-
-            if self
-                .server_context
-                .receive_from(id, channel::Channel::CubeRegistry)
-                .is_some()
-            {
-                self.server_context.send_serializable(
-                    id,
-                    channel::Channel::Geosphere,
-                    &channel::CubeRegistryMessage {
-                        cube_registry: self.geosphere.cube_registry().clone(),
-                    },
-                );
             }
         }
 

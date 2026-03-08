@@ -4,8 +4,6 @@ use super::provider;
 use crate::adapter::net;
 use crate::adapter::shared;
 use crate::app::geosphere;
-use crate::app::geosphere::cube;
-use crate::app::geosphere::slot;
 use crate::app::geosphere::spectator;
 use crate::app::viewport;
 use crate::app::viewport::quad;
@@ -103,68 +101,6 @@ impl super::Pollable for Consumer {
 }
 
 impl Consumer {
-    pub async fn slot_cube(&mut self, p_position: glam::IVec3) -> (slot::Slot, Option<cube::Cube>) {
-        if !self.shared_client_context.lock().unwrap().is_connected() {
-            return (slot::Slot::default(), None);
-        }
-
-        self.shared_client_context
-            .lock()
-            .unwrap()
-            .send_serializable(
-                channel::Channel::Geosphere,
-                &channel::GeosphereMessage {
-                    position: p_position,
-                },
-            );
-
-        let message = net::client::ServerResponse::new(
-            self.shared_client_context.clone(),
-            channel::Channel::Geosphere,
-        )
-        .await;
-
-        if message.is_empty() {
-            return (slot::Slot::default(), None);
-        }
-
-        let output_message =
-            postcard::from_bytes::<provider::channel::GeosphereMessage>(&message).unwrap();
-
-        (output_message.slot, output_message.cube)
-    }
-
-    pub async fn cube_registry(&mut self) -> Option<cube::CubeRegistry> {
-        if !self.shared_client_context.lock().unwrap().is_disconnected() {
-            return None;
-        }
-
-        self.shared_client_context
-            .lock()
-            .unwrap()
-            .send_serializable(
-                channel::Channel::CubeRegistry,
-                &channel::CubeRegistryMessage(),
-            );
-
-        let message = net::client::ServerResponse::new(
-            self.shared_client_context.clone(),
-            channel::Channel::CubeRegistry,
-        )
-        .await;
-
-        if message.is_empty() {
-            return None;
-        }
-
-        let cube_registry =
-            postcard::from_bytes::<provider::channel::CubeRegistryMessage>(&message)
-                .unwrap()
-                .cube_registry;
-
-        Some(cube_registry)
-    }
-
     pub fn spectate(
         &mut self,
         p_abort_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
