@@ -66,7 +66,7 @@ impl ProviderBuilder {
     }
 }
 
-impl super::Pollable for Provider {
+impl super::pollable::Pollable for Provider {
     fn poll(&mut self, p_delta: std::time::Duration) -> anyhow::Result<()> {
         self.server_context
             .update(p_delta)

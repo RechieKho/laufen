@@ -17,8 +17,8 @@ pub fn deserialize_geosphere_texture_image(
         .collect::<Vec<renderer::texture::TextureImage>>()
 }
 
-pub type ConsumerHandle = arch::PollHandle<arch::consumer::Consumer>;
-pub type ProviderHandle = arch::PollHandle<arch::provider::Provider>;
+pub type ConsumerHandle = arch::pollable::PollHandle<arch::consumer::Consumer>;
+pub type ProviderHandle = arch::pollable::PollHandle<arch::provider::Provider>;
 
 #[derive(getset::Getters, getset::MutGetters)]
 pub struct Engine {

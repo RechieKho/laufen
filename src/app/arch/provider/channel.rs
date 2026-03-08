@@ -1,5 +1,16 @@
 use crate::adapter::net;
+use crate::app::arch::channel_config_builder;
+use crate::app::arch::channel_config_builder::Message;
+use crate::app::arch::channel_config_builder::ReliableUnorderedMessage;
 use crate::app::geosphere;
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct PrepareMessage {
+    pub cube_registry: geosphere::cube::CubeRegistry,
+}
+
+impl Message for PrepareMessage {}
+impl ReliableUnorderedMessage for PrepareMessage {}
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct ChunkInsertionMessage {
@@ -7,21 +18,14 @@ pub struct ChunkInsertionMessage {
     pub chunk: geosphere::chunk::Chunk,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
-pub struct CubeRegistryMessage {
-    pub cube_registry: geosphere::cube::CubeRegistry,
+impl Message for ChunkInsertionMessage {
+    const MAX_COUNT: usize = 512;
 }
-
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
-pub struct GeosphereMessage {
-    pub slot: geosphere::slot::Slot,
-    pub cube: Option<geosphere::cube::Cube>,
-}
+impl ReliableUnorderedMessage for ChunkInsertionMessage {}
 
 pub enum Channel {
-    Geosphere,
-    CubeRegistry,
     ChunkInsertion,
+    PrepareMessage,
 }
 
 impl From<Channel> for u8 {
@@ -31,42 +35,21 @@ impl From<Channel> for u8 {
 }
 
 impl Channel {
-    const RESEND_TIME: std::time::Duration = std::time::Duration::from_millis(300);
-    const MAX_GEOSPHERE_MESSAGE_COUNT: usize = 512;
-    // TODO: Please make all channel size to be more than just one struct.
-
     pub fn channel_id(&self) -> u8 {
         match self {
-            Self::Geosphere => 0,
-            Self::CubeRegistry => 1,
-            Self::ChunkInsertion => 2,
+            Self::ChunkInsertion => 0,
+            Self::PrepareMessage => 1,
         }
     }
 
     pub fn channels_config() -> Vec<net::server::ChannelConfig> {
         vec![
-            net::server::ChannelConfig {
-                channel_id: Self::Geosphere.into(),
-                max_memory_usage_bytes: std::mem::size_of::<GeosphereMessage>()
-                    * Self::MAX_GEOSPHERE_MESSAGE_COUNT,
-                send_type: net::server::SendType::ReliableOrdered {
-                    resend_time: Self::RESEND_TIME,
-                },
-            },
-            net::server::ChannelConfig {
-                channel_id: Self::CubeRegistry.into(),
-                max_memory_usage_bytes: std::mem::size_of::<CubeRegistryMessage>(),
-                send_type: net::server::SendType::ReliableOrdered {
-                    resend_time: Self::RESEND_TIME,
-                },
-            },
-            net::server::ChannelConfig {
-                channel_id: Self::ChunkInsertion.into(),
-                max_memory_usage_bytes: std::mem::size_of::<ChunkInsertionMessage>() * 1024,
-                send_type: net::server::SendType::ReliableUnordered {
-                    resend_time: Self::RESEND_TIME,
-                },
-            },
+            channel_config_builder::channel_config_reliable_unordered::<ChunkInsertionMessage>(
+                Self::ChunkInsertion.into(),
+            ),
+            channel_config_builder::channel_config_reliable_unordered::<PrepareMessage>(
+                Self::PrepareMessage.into(),
+            ),
         ]
     }
 }

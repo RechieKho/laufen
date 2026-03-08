@@ -72,7 +72,7 @@ pub struct Consumer {
     shared_client_context: net::client::SharedClientContext,
 }
 
-impl super::Pollable for Consumer {
+impl super::pollable::Pollable for Consumer {
     fn poll(&mut self, p_delta: std::time::Duration) -> anyhow::Result<()> {
         self.shared_client_context
             .lock()
