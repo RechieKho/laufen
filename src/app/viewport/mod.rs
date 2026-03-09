@@ -53,6 +53,18 @@ impl Viewport {
         )
     }
 
+    pub fn update_texture_atlas(
+        &mut self,
+        p_texture_atlas_builder: grid_texture_atlas::GridTextureAtlasBuilder,
+    ) -> anyhow::Result<()> {
+        p_texture_atlas_builder.build_into(
+            GridTextureAtlasBuilderParameters {
+                server: &self.rendering_server,
+            },
+            self.quad_render_pipeline_context.texture_atlas_mut(),
+        )
+    }
+
     pub fn with_texture_atlas_builder(
         p_event_loop: &winit::event_loop::ActiveEventLoop,
         p_texture_atlas_builder: grid_texture_atlas::GridTextureAtlasBuilder,

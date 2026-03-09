@@ -4,6 +4,7 @@ use super::morton::Morton;
 use super::point_cluster;
 use super::slot;
 use super::Geosphere;
+use crate::adapter::renderer;
 use crate::adapter::shared;
 
 #[derive(partially::Partial)]
@@ -201,5 +202,13 @@ impl ActiveGeosphere {
             let _ = self.saver.save_chunk(*p_iter_key, p_iter_chunk);
             false
         });
+    }
+
+    pub fn deserialize_geosphere_texture_image(self) -> Vec<renderer::texture::TextureImage> {
+        self.cube_registry
+            .geosphere_serializable_texture_image()
+            .iter()
+            .map(|p_image| p_image.clone().to_texture_image().unwrap())
+            .collect::<Vec<renderer::texture::TextureImage>>()
     }
 }

@@ -72,9 +72,12 @@ impl vertex_buffer::VertexBufferElement for QuadVertex {
 }
 
 /// A render pipeline context for rendering quads.
+#[derive(getset::Getters, getset::MutGetters)]
 pub struct QuadRenderPipelineContext {
     render_pipeline_context: render_pipeline_context::RenderPipelineContext,
     render_data: render_data::RenderData,
+
+    #[getset(get = "pub", get_mut = "pub")]
     texture_atlas: grid_texture_atlas::GridTextureAtlas,
 }
 

@@ -1,21 +1,8 @@
-use crate::adapter::renderer;
 use crate::adapter::renderer::*;
 use crate::adapter::shared;
 use crate::app::arch;
 
-use super::geosphere;
 use super::viewport;
-
-pub fn deserialize_geosphere_texture_image(
-    p_geosphere: &geosphere::active_geosphere::ActiveGeosphere,
-) -> Vec<renderer::texture::TextureImage> {
-    p_geosphere
-        .cube_registry()
-        .geosphere_serializable_texture_image()
-        .iter()
-        .map(|p_image| p_image.clone().to_texture_image().unwrap())
-        .collect::<Vec<renderer::texture::TextureImage>>()
-}
 
 pub type ConsumerHandle = arch::pollable::PollHandle<arch::consumer::Consumer>;
 pub type ProviderHandle = arch::pollable::PollHandle<arch::provider::Provider>;

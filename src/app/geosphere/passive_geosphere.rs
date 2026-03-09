@@ -2,6 +2,7 @@ use super::chunk;
 use super::cube;
 use super::morton::Morton;
 use super::slot;
+use crate::adapter::renderer;
 use crate::adapter::shared;
 
 pub type SharedPassiveGeosphere = shared::Shared<PassiveGeosphere>;
@@ -35,5 +36,15 @@ impl super::Geosphere for PassiveGeosphere {
             .as_ref()
             .and_then(|cube_instance| self.cube_registry.cubes().get(&cube_instance.id).cloned());
         (slot, cube)
+    }
+}
+
+impl PassiveGeosphere {
+    pub fn deserialize_geosphere_texture_image(self) -> Vec<renderer::texture::TextureImage> {
+        self.cube_registry
+            .geosphere_serializable_texture_image()
+            .iter()
+            .map(|p_image| p_image.clone().to_texture_image().unwrap())
+            .collect::<Vec<renderer::texture::TextureImage>>()
     }
 }
