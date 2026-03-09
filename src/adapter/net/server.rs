@@ -256,6 +256,8 @@ impl ServerContext {
         let key = {
             let mut hasher = rapidhash::quality::RapidHasher::default();
             p_message.hash(&mut hasher);
+            p_channel_id.hash(&mut hasher);
+            p_target_client_id.hash(&mut hasher);
             hasher.finish()
         };
 

@@ -121,6 +121,20 @@ impl super::pollable::Pollable for Consumer {
                 .purge_slot_point_cluster(chunk_slot_point_cluster);
         }
 
+        while let Some(message) = self
+            .shared_client_context
+            .lock()
+            .unwrap()
+            .receive_deserializable::<provider::channel::ChunkRemovalMessage, _>(
+            provider::channel::Channel::ChunkRemoval,
+        ) {
+            self.shared_geosphere
+                .lock()
+                .unwrap()
+                .chunk_map
+                .remove(&message.key);
+        }
+
         Ok(())
     }
 }

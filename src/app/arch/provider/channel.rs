@@ -27,9 +27,20 @@ impl Message for ChunkInsertionMessage {
 }
 impl ReliableUnorderedMessage for ChunkInsertionMessage {}
 
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct ChunkRemovalMessage {
+    pub key: geosphere::chunk::ChunkKey,
+}
+
+impl Message for ChunkRemovalMessage {
+    const MAX_COUNT: usize = 512;
+}
+impl ReliableUnorderedMessage for ChunkRemovalMessage {}
+
 pub enum Channel {
     ChunkInsertion,
     PrepareMessage,
+    ChunkRemoval,
 }
 
 impl From<Channel> for u8 {
@@ -43,6 +54,7 @@ impl Channel {
         match self {
             Self::ChunkInsertion => 0,
             Self::PrepareMessage => 1,
+            Self::ChunkRemoval => 2,
         }
     }
 
@@ -53,6 +65,9 @@ impl Channel {
             ),
             channel_config_builder::channel_config_large::<PrepareMessage>(
                 Self::PrepareMessage.into(),
+            ),
+            channel_config_builder::channel_config_reliable_unordered::<ChunkRemovalMessage>(
+                Self::ChunkRemoval.into(),
             ),
         ]
     }

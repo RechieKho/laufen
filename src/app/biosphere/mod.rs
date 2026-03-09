@@ -1,4 +1,5 @@
 pub mod player;
+pub mod spatial;
 
 #[derive(Default, getset::Getters, getset::MutGetters)]
 pub struct Biosphere {

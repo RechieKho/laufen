@@ -5,15 +5,22 @@ use crate::adapter::net;
 use crate::adapter::shared;
 use crate::app::biosphere;
 use crate::app::geosphere;
+use crate::app::geosphere::morton::Morton;
 use shipyard::IntoIter;
 
 pub type SharedProvider = shared::Shared<Provider>;
+
+type ChunkSubscription = rapidhash::RapidHashMap<net::server::ClientId, Vec<glam::IVec3>>;
+type ReadyClientSet = rapidhash::RapidHashSet<net::server::ClientId>;
 
 pub struct Provider {
     server_context: net::server::ServerContext,
     #[allow(unused)]
     geosphere: geosphere::active_geosphere::ActiveGeosphere,
     biosphere: biosphere::Biosphere,
+    chunk_subscription: ChunkSubscription,
+    client_active_chunk_range_radius: u32,
+    ready_client_set: ReadyClientSet,
 }
 
 #[derive(partially::Partial)]
@@ -25,6 +32,7 @@ pub struct ProviderBuilder {
     pub server_authentication: net::server::ServerAuthentication,
     pub connection_available_bytes_per_tick: u64,
     pub geosphere_builder: geosphere::active_geosphere::ActiveGeosphereBuilder,
+    pub client_active_chunk_range_radius: u32,
 }
 
 pub struct ProviderBuilderParameters {
@@ -41,6 +49,7 @@ impl ProviderBuilder {
             geosphere_builder:
                 geosphere::active_geosphere::ActiveGeosphereBuilder::try_with_sample()?,
             connection_available_bytes_per_tick: 60_000,
+            client_active_chunk_range_radius: 5,
         })
     }
 
@@ -62,8 +71,89 @@ impl ProviderBuilder {
             server_context: server_context_builder
                 .build(p_parameters.server_context_builder_parameters),
             geosphere: self.geosphere_builder.build(),
-            biosphere: biosphere::Biosphere::default(),
+            biosphere: Default::default(),
+            chunk_subscription: Default::default(),
+            client_active_chunk_range_radius: self.client_active_chunk_range_radius,
+            ready_client_set: Default::default(),
         }
+    }
+}
+
+impl Provider {
+    fn handle_client_subscription(&mut self) {
+        self.biosphere.entities().run(
+            |p_players: shipyard::View<biosphere::player::Player>,
+             p_spatials: shipyard::View<biosphere::spatial::Spatial>| {
+                for (player, spatial) in (&p_players, &p_spatials).iter() {
+                    if !self.ready_client_set.contains(player.client_id()) {
+                        continue;
+                    }
+
+                    let slot_position = glam::IVec3::new(
+                        spatial.position.x as i32,
+                        spatial.position.y as i32,
+                        spatial.position.z as i32,
+                    );
+                    let (chunk_position, _) =
+                        geosphere::chunk::ChunkMorton::compute_coordinate(slot_position);
+
+                    let chunk_point_cluster = geosphere::point_cluster::PointCluster {
+                        min: chunk_position - self.client_active_chunk_range_radius as i32,
+                        max: chunk_position + self.client_active_chunk_range_radius as i32,
+                    };
+                    let player_chunk_subscription = self
+                        .chunk_subscription
+                        .entry(*player.client_id())
+                        .or_default();
+
+                    // TODO: It is too much, it causes the server update to lag for too long, causing
+                    // disconnection. Got to find a way to separate this.
+
+                    //{
+                    //    let chunk_point_set = chunk_point_cluster
+                    //        .into_iter()
+                    //        .collect::<rapidhash::RapidHashSet<glam::IVec3>>();
+                    //    let obsolete_chunk_points = player_chunk_subscription
+                    //        .iter()
+                    //        .copied()
+                    //        .filter(|p_chunk_position| !chunk_point_set.contains(p_chunk_position));
+                    //    let obsolete_chunk_point_set = obsolete_chunk_points
+                    //        .clone()
+                    //        .collect::<rapidhash::RapidHashSet<glam::IVec3>>(
+                    //    );
+                    //    for obsolete_point in obsolete_chunk_points {
+                    //        self.server_context.send_serializable(
+                    //            *player.client_id(),
+                    //            channel::Channel::ChunkRemoval,
+                    //            &channel::ChunkRemovalMessage {
+                    //                key: geosphere::chunk::ChunkKey::from(obsolete_point),
+                    //            },
+                    //        );
+                    //    }
+                    //    player_chunk_subscription.retain(|p_chunk_point| {
+                    //        obsolete_chunk_point_set.contains(p_chunk_point)
+                    //    });
+                    //}
+
+                    {
+                        for new_point in chunk_point_cluster.into_iter() {
+                            if player_chunk_subscription.contains(&new_point) {
+                                continue;
+                            }
+
+                            let key = geosphere::chunk::ChunkKey::from(new_point);
+                            let chunk = self.geosphere.chunk(&key).clone();
+                            self.server_context.send_serializable(
+                                *player.client_id(),
+                                channel::Channel::ChunkInsertion,
+                                &channel::ChunkInsertionMessage { chunk, key },
+                            );
+                            player_chunk_subscription.push(new_point);
+                        }
+                    }
+                }
+            },
+        )
     }
 }
 
@@ -76,9 +166,10 @@ impl super::pollable::Pollable for Provider {
         while let Some(event) = self.server_context.get_event() {
             match event {
                 net::server::ServerEvent::ClientConnected { client_id } => {
-                    self.biosphere
-                        .entities_mut()
-                        .add_entity(biosphere::player::Player::new(client_id));
+                    self.biosphere.entities_mut().add_entity((
+                        biosphere::player::Player::new(client_id),
+                        biosphere::spatial::Spatial::default(),
+                    ));
 
                     self.server_context.send_large_serializable(
                         client_id,
@@ -87,6 +178,7 @@ impl super::pollable::Pollable for Provider {
                             cube_registry: self.geosphere.cube_registry().clone(),
                         },
                     );
+                    log::info!("Client {} joined.", client_id);
                 }
 
                 net::server::ServerEvent::ClientDisconnected {
@@ -113,26 +205,12 @@ impl super::pollable::Pollable for Provider {
                     consumer::channel::Channel::Ready,
                 )
             {
-                // TODO: I think it wouldn't be too nice only give a chunk of the world only.
-                // This should be dynamically given based on the client's position.
-                // Moreover, it should keep a list of cluster that the player is registered to,
-                // So to only send to players the updates it need for the modified chunk.
-                let cluster = geosphere::point_cluster::PointCluster {
-                    min: glam::IVec3::new(-5, -5, -5),
-                    max: glam::IVec3::new(5, 5, 5),
-                };
-
-                for point in cluster {
-                    let key = geosphere::chunk::ChunkKey::from(point);
-                    let chunk = self.geosphere.chunk(&key).clone();
-                    self.server_context.send_serializable(
-                        client_id,
-                        channel::Channel::ChunkInsertion,
-                        &channel::ChunkInsertionMessage { chunk, key },
-                    );
-                }
+                self.ready_client_set.insert(client_id);
+                log::info!("Client {} ready.", client_id);
             }
         }
+
+        self.handle_client_subscription();
 
         Ok(())
     }
