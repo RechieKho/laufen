@@ -72,6 +72,37 @@ impl UnsecureEngineBuilder {
 }
 
 impl Engine {
+    fn handle_consumer_preparation_notice(&mut self) -> anyhow::Result<()> {
+        if let Some(consumer_handle) = self.consumer_handle.as_ref() {
+            let mut consumer = consumer_handle.shared_pollable().lock().unwrap();
+            if let Some(notice) = consumer.take_preparation_notice() {
+                if !notice.geosphere_texture_images.is_empty() {
+                    let builder = viewport::grid_texture_atlas::GridTextureAtlasBuilder {
+                        images: &notice.geosphere_texture_images,
+                        texture_label: Some("Geosphere texture images"),
+                        ..Default::default()
+                    };
+                    self.viewport.update_texture_atlas(builder)?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn close(&mut self, p_event_loop: &winit::event_loop::ActiveEventLoop) {
+        self.abort_flag
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        if let Some(handle) = self.consumer_handle.as_ref() {
+            handle.shut_down();
+            handle.shared_pollable().lock().unwrap().disconnect();
+        }
+        if let Some(handle) = self.provider_handle.as_ref() {
+            handle.shut_down();
+        }
+        p_event_loop.exit();
+    }
+
     pub fn render(&mut self) -> anyhow::Result<()> {
         let quad_instances = if let Some(handle) = self.consumer_handle.as_ref() {
             handle
@@ -84,10 +115,10 @@ impl Engine {
         };
 
         let frame_per_second_text = format!("FPS: {}", self.frame_per_second);
-        let text = text::Text::new(frame_per_second_text.as_str())
+        let frame_per_second_text = text::Text::new(frame_per_second_text.as_str())
             .with_scale(24.0)
             .with_color([1.0, 1.0, 1.0, 1.0]);
-        let section = text::TextSection::default().add_text(text);
+        let section = text::TextSection::default().add_text(frame_per_second_text);
 
         self.viewport.render(viewport::ViewportRenderParameters {
             quad_instances: quad_instances.as_slice(),
@@ -105,22 +136,15 @@ impl Engine {
         self.frame_per_second = (1.0 / delta.as_secs_f32()) as _;
 
         if p_input.close_requested() {
-            self.abort_flag
-                .store(true, std::sync::atomic::Ordering::Relaxed);
-            if let Some(handle) = self.consumer_handle.as_ref() {
-                handle.shut_down();
-                handle.shared_pollable().lock().unwrap().disconnect();
-            }
-            if let Some(handle) = self.provider_handle.as_ref() {
-                handle.shut_down();
-            }
-            p_event_loop.exit();
+            self.close(p_event_loop);
             return;
         }
 
         if let Some((width, height)) = p_input.resolution() {
             self.viewport.resize(width, height);
         }
+
+        self.handle_consumer_preparation_notice().unwrap();
 
         let camera_properties = self.viewport.camera_properties();
 

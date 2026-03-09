@@ -57,12 +57,11 @@ impl Viewport {
         &mut self,
         p_texture_atlas_builder: grid_texture_atlas::GridTextureAtlasBuilder,
     ) -> anyhow::Result<()> {
-        p_texture_atlas_builder.build_into(
-            GridTextureAtlasBuilderParameters {
-                server: &self.rendering_server,
-            },
-            self.quad_render_pipeline_context.texture_atlas_mut(),
-        )
+        let atlas = p_texture_atlas_builder.build(GridTextureAtlasBuilderParameters {
+            server: &self.rendering_server,
+        })?;
+        *self.quad_render_pipeline_context.texture_atlas_mut() = atlas;
+        Ok(())
     }
 
     pub fn with_texture_atlas_builder(

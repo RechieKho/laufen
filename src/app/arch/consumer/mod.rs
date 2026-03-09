@@ -2,6 +2,7 @@ pub mod channel;
 
 use super::provider;
 use crate::adapter::net;
+use crate::adapter::renderer;
 use crate::adapter::shared;
 use crate::app::geosphere;
 use crate::app::geosphere::morton::Morton;
@@ -50,19 +51,17 @@ impl UnsecureConsumerBuilder {
             client_context_builder.build(p_parameters.client_context_builder_parameters),
         );
 
-        // TODO: Need to fetch from provider.
-        //let geosphere = geosphere::passive_geosphere::SharedPassiveGeosphere::default();
-        //geosphere.lock().unwrap().cube_registry =
-        //    geosphere::cube::CubeRegistryBuilder::try_with_sample()
-        //        .unwrap()
-        //        .build();
-
         Consumer {
             shared_client_context,
             shared_geosphere: Default::default(),
             spectator: spectator::Spectator::default(),
+            preparation_notice: None,
         }
     }
+}
+
+pub struct ConsumerPreparationNotice {
+    pub geosphere_texture_images: Vec<renderer::texture::TextureImage>,
 }
 
 pub type SharedConsumer = shared::Shared<Consumer>;
@@ -71,6 +70,7 @@ pub struct Consumer {
     shared_client_context: net::client::SharedClientContext,
     shared_geosphere: geosphere::passive_geosphere::SharedPassiveGeosphere,
     spectator: spectator::Spectator,
+    preparation_notice: Option<ConsumerPreparationNotice>,
 }
 
 impl super::pollable::Pollable for Consumer {
@@ -88,6 +88,14 @@ impl super::pollable::Pollable for Consumer {
                     provider::channel::Channel::PrepareMessage,
                 )
             {
+                self.preparation_notice = Some(ConsumerPreparationNotice {
+                    geosphere_texture_images: message
+                        .cube_registry
+                        .geosphere_serializable_texture_image()
+                        .iter()
+                        .map(|p_image| p_image.clone().to_texture_image().unwrap())
+                        .collect::<Vec<renderer::texture::TextureImage>>(),
+                });
                 self.shared_geosphere.lock().unwrap().cube_registry = message.cube_registry;
                 client_context
                     .send_serializable(channel::Channel::Ready, &channel::ReadyMessage {});
@@ -132,5 +140,9 @@ impl Consumer {
 
     pub fn disconnect(&mut self) {
         self.shared_client_context.lock().unwrap().disconnect();
+    }
+
+    pub fn take_preparation_notice(&mut self) -> Option<ConsumerPreparationNotice> {
+        self.preparation_notice.take()
     }
 }
