@@ -55,6 +55,7 @@ impl ProviderBuilder {
                 server_channels_config: channel::Channel::channels_config(),
                 client_channels_config: consumer::channel::Channel::channels_config(),
             },
+            ..Default::default()
         };
 
         Provider {
@@ -79,24 +80,13 @@ impl super::pollable::Pollable for Provider {
                         .entities_mut()
                         .add_entity(biosphere::player::Player::new(client_id));
 
-                    // TODO: I think it wouldn't be too nice only give a chunk of the world only.
-                    // This should be dynamically given based on the client's position.
-                    // Moreover, it should keep a list of cluster that the player is registered to,
-                    // So to only send to players the updates it need for the modified chunk.
-                    let cluster = geosphere::point_cluster::PointCluster {
-                        min: glam::IVec3::new(-5, -5, -5),
-                        max: glam::IVec3::new(5, 5, 5),
-                    };
-
-                    for point in cluster {
-                        let key = geosphere::chunk::ChunkKey::from(point);
-                        let chunk = self.geosphere.chunk(&key).clone();
-                        self.server_context.send_serializable(
-                            client_id,
-                            channel::Channel::ChunkInsertion,
-                            &channel::ChunkInsertionMessage { chunk, key },
-                        );
-                    }
+                    self.server_context.send_large_serializable(
+                        client_id,
+                        channel::Channel::PrepareMessage,
+                        &channel::PrepareMessage {
+                            cube_registry: self.geosphere.cube_registry().clone(),
+                        },
+                    );
                 }
 
                 net::server::ServerEvent::ClientDisconnected {
@@ -112,6 +102,35 @@ impl super::pollable::Pollable for Provider {
                         }
                     },
                 ),
+            }
+        }
+
+        for client_id in self.server_context.get_client_ids() {
+            while let Some(_message) = self
+                .server_context
+                .receive_deserializable_from::<consumer::channel::ReadyMessage, _>(
+                    client_id,
+                    consumer::channel::Channel::Ready,
+                )
+            {
+                // TODO: I think it wouldn't be too nice only give a chunk of the world only.
+                // This should be dynamically given based on the client's position.
+                // Moreover, it should keep a list of cluster that the player is registered to,
+                // So to only send to players the updates it need for the modified chunk.
+                let cluster = geosphere::point_cluster::PointCluster {
+                    min: glam::IVec3::new(-5, -5, -5),
+                    max: glam::IVec3::new(5, 5, 5),
+                };
+
+                for point in cluster {
+                    let key = geosphere::chunk::ChunkKey::from(point);
+                    let chunk = self.geosphere.chunk(&key).clone();
+                    self.server_context.send_serializable(
+                        client_id,
+                        channel::Channel::ChunkInsertion,
+                        &channel::ChunkInsertionMessage { chunk, key },
+                    );
+                }
             }
         }
 

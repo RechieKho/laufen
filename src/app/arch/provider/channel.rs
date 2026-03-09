@@ -1,6 +1,7 @@
 use crate::adapter::net;
 use crate::app::arch::channel_config_builder;
 use crate::app::arch::channel_config_builder::Message;
+use crate::app::arch::channel_config_builder::ReliableOrderedMessage;
 use crate::app::arch::channel_config_builder::ReliableUnorderedMessage;
 use crate::app::geosphere;
 
@@ -9,8 +10,11 @@ pub struct PrepareMessage {
     pub cube_registry: geosphere::cube::CubeRegistry,
 }
 
-impl Message for PrepareMessage {}
+impl Message for PrepareMessage {
+    const MAX_COUNT: usize = 512;
+}
 impl ReliableUnorderedMessage for PrepareMessage {}
+impl ReliableOrderedMessage for PrepareMessage {}
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct ChunkInsertionMessage {
@@ -47,7 +51,7 @@ impl Channel {
             channel_config_builder::channel_config_reliable_unordered::<ChunkInsertionMessage>(
                 Self::ChunkInsertion.into(),
             ),
-            channel_config_builder::channel_config_reliable_unordered::<PrepareMessage>(
+            channel_config_builder::channel_config_large::<PrepareMessage>(
                 Self::PrepareMessage.into(),
             ),
         ]

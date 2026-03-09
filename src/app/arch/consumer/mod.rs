@@ -51,16 +51,16 @@ impl UnsecureConsumerBuilder {
         );
 
         // TODO: Need to fetch from provider.
-        let geosphere = geosphere::passive_geosphere::SharedPassiveGeosphere::default();
-        geosphere.lock().unwrap().cube_registry =
-            geosphere::cube::CubeRegistryBuilder::try_with_sample()
-                .unwrap()
-                .build();
+        //let geosphere = geosphere::passive_geosphere::SharedPassiveGeosphere::default();
+        //geosphere.lock().unwrap().cube_registry =
+        //    geosphere::cube::CubeRegistryBuilder::try_with_sample()
+        //        .unwrap()
+        //        .build();
 
         Consumer {
-            geosphere,
-            spectator: spectator::Spectator::default(),
             shared_client_context,
+            shared_geosphere: Default::default(),
+            spectator: spectator::Spectator::default(),
         }
     }
 }
@@ -68,9 +68,9 @@ impl UnsecureConsumerBuilder {
 pub type SharedConsumer = shared::Shared<Consumer>;
 
 pub struct Consumer {
-    geosphere: geosphere::passive_geosphere::SharedPassiveGeosphere,
-    spectator: spectator::Spectator,
     shared_client_context: net::client::SharedClientContext,
+    shared_geosphere: geosphere::passive_geosphere::SharedPassiveGeosphere,
+    spectator: spectator::Spectator,
 }
 
 impl super::pollable::Pollable for Consumer {
@@ -80,6 +80,19 @@ impl super::pollable::Pollable for Consumer {
             .unwrap()
             .update(p_delta)
             .map_err(anyhow::Error::msg)?;
+
+        {
+            let mut client_context = self.shared_client_context.lock().unwrap();
+            while let Some(message) = client_context
+                .receive_large_deserializable::<provider::channel::PrepareMessage, _>(
+                    provider::channel::Channel::PrepareMessage,
+                )
+            {
+                self.shared_geosphere.lock().unwrap().cube_registry = message.cube_registry;
+                client_context
+                    .send_serializable(channel::Channel::Ready, &channel::ReadyMessage {});
+            }
+        }
 
         while let Some(message) = self
             .shared_client_context
@@ -91,7 +104,7 @@ impl super::pollable::Pollable for Consumer {
             let chunk_position = *message.key;
             let chunk_slot_point_cluster =
                 geosphere::chunk::ChunkMorton::compute_cluster(chunk_position);
-            self.geosphere
+            self.shared_geosphere
                 .lock()
                 .unwrap()
                 .chunk_map
@@ -110,8 +123,11 @@ impl Consumer {
         p_abort_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
         p_camera_properties: &viewport::ViewportCameraProperties,
     ) -> Vec<quad::QuadInstance> {
-        self.spectator
-            .spectate_geosphere(self.geosphere.clone(), p_abort_flag, p_camera_properties)
+        self.spectator.spectate_geosphere(
+            self.shared_geosphere.clone(),
+            p_abort_flag,
+            p_camera_properties,
+        )
     }
 
     pub fn disconnect(&mut self) {

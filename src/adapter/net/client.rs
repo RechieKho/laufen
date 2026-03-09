@@ -3,7 +3,9 @@ use crate::adapter::shared;
 use std::net;
 use std::time;
 
+pub type LargeParcelGroup = Vec<Option<server::LargeParcelData>>;
 pub type SharedClientContext = shared::Shared<ClientContext>;
+pub type LargeParcelGroupRegistry = rapidhash::RapidHashMap<u64, LargeParcelGroup>;
 
 impl From<ClientContext> for SharedClientContext {
     fn from(p_value: ClientContext) -> Self {
@@ -14,6 +16,7 @@ impl From<ClientContext> for SharedClientContext {
 pub struct ClientContext {
     client: renet::RenetClient,
     transport: renet_netcode::NetcodeClientTransport,
+    large_parcel_group_registry: LargeParcelGroupRegistry,
 }
 
 #[derive(partially::Partial, Default)]
@@ -55,7 +58,11 @@ impl UnsecureClientContextBuilder {
             renet_netcode::NetcodeClientTransport::new(current_time, authentication, socket)
                 .unwrap();
 
-        ClientContext { client, transport }
+        ClientContext {
+            client,
+            transport,
+            large_parcel_group_registry: Default::default(),
+        }
     }
 }
 
@@ -120,6 +127,67 @@ impl ClientContext {
             self.transport.send_packets(&mut self.client)?;
         }
         Ok(())
+    }
+
+    pub fn receive_large<C>(&mut self, p_channel_id: C) -> Option<server::Bytes>
+    where
+        C: Into<u8>,
+    {
+        let p_channel_id = p_channel_id.into();
+        while let Some(message) =
+            self.receive_deserializable::<server::LargeParcelMessage, _>(p_channel_id)
+        {
+            match message {
+                server::LargeParcelMessage::Metadata(metadata) => {
+                    let parcel_group = vec![None; metadata.count as usize] as LargeParcelGroup;
+                    assert!(self
+                        .large_parcel_group_registry
+                        .insert(metadata.key, parcel_group)
+                        .is_none());
+                }
+                server::LargeParcelMessage::Body(body) => {
+                    *self
+                        .large_parcel_group_registry
+                        .get_mut(&body.key)
+                        .unwrap()
+                        .get_mut(body.index as usize)
+                        .unwrap() = Some(body.data);
+                }
+            };
+        }
+
+        let mut selected_key = None as Option<u64>;
+
+        for (key, value) in self.large_parcel_group_registry.iter() {
+            if value.iter().all(|p_parcel| p_parcel.is_some()) {
+                selected_key = Some(*key);
+                break;
+            }
+        }
+
+        if let Some(selected_key) = selected_key {
+            let completed_parcel_group = self
+                .large_parcel_group_registry
+                .remove(&selected_key)
+                .unwrap();
+            let mut message = Vec::<u8>::default();
+            for parcel in completed_parcel_group {
+                let parcel = parcel.unwrap();
+                message.extend_from_slice(parcel.as_slice());
+            }
+            return Some(server::Bytes::from(message));
+        }
+
+        None
+    }
+
+    pub fn receive_large_deserializable<D, C>(&mut self, p_channel_id: C) -> Option<D>
+    where
+        D: serde::de::DeserializeOwned,
+        C: Into<u8>,
+    {
+        self.receive_large(p_channel_id)
+            .map(|p_bytes| postcard::from_bytes::<D>(&p_bytes).unwrap())
     }
 }
 

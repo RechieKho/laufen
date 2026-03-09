@@ -6,9 +6,7 @@ use crate::app::arch::channel_config_builder::ReliableUnorderedMessage;
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct ReadyMessage {}
-impl Message for ReadyMessage {
-    const MAX_COUNT: usize = 0;
-}
+impl Message for ReadyMessage {}
 impl ReliableUnorderedMessage for ReadyMessage {}
 impl ReliableOrderedMessage for ReadyMessage {}
 

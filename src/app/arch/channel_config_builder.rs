@@ -66,6 +66,17 @@ where
             },
         }
     }
+
+    pub fn build_large(self) -> net::server::ChannelConfig {
+        net::server::ChannelConfig {
+            channel_id: self.channel,
+            max_memory_usage_bytes: std::mem::size_of::<net::server::LargeParcelMessage>()
+                * M::MAX_COUNT,
+            send_type: net::server::SendType::ReliableOrdered {
+                resend_time: M::RESEND_TIME,
+            },
+        }
+    }
 }
 
 pub fn channel_config_unreliable<M: Message>(p_channel_id: u8) -> net::server::ChannelConfig {
@@ -82,4 +93,10 @@ pub fn channel_config_reliable_ordered<M: ReliableOrderedMessage>(
     p_channel_id: u8,
 ) -> net::server::ChannelConfig {
     ChannelConfigBuilder::<M>::new(p_channel_id).build_reliable_ordered()
+}
+
+pub fn channel_config_large<M: ReliableOrderedMessage>(
+    p_channel_id: u8,
+) -> net::server::ChannelConfig {
+    ChannelConfigBuilder::<M>::new(p_channel_id).build_large()
 }
