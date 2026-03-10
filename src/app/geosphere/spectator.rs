@@ -16,6 +16,8 @@ type SharedLoadingLump = shared::Shared<LoadingLump>;
 pub trait SlotCubeProxy: AsyncFn(glam::IVec3) -> (slot::Slot, Option<cube::Cube>) {}
 impl<T> SlotCubeProxy for T where T: AsyncFn(glam::IVec3) -> (slot::Slot, Option<cube::Cube>) {}
 
+pub type SharedSpectator = shared::Shared<Spectator>;
+
 #[derive(Default)]
 pub struct Spectator {
     lump: SharedLump,

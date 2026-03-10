@@ -68,11 +68,11 @@ impl ProviderBuilder {
             ..Default::default()
         };
 
-        let shared_data = ProviderSharedData {
+        let poller = ProviderPoller {
             server_context: shared::share(
                 server_context_builder.build(p_parameters.server_context_builder_parameters),
             ),
-            geosphere: shared::share(self.geosphere_builder.build()),
+            active_geosphere: shared::share(self.geosphere_builder.build()),
             biosphere: Default::default(),
             chunk_subscription: Default::default(),
             client_active_chunk_range_radius: std::sync::Arc::new(
@@ -84,12 +84,12 @@ impl ProviderBuilder {
         };
 
         let poll_join_handle = {
-            let mut shared_data = shared_data.clone();
+            let mut poller = poller.clone();
             tokio::spawn(async move {
                 let mut interval = tokio::time::interval(self.poll_interval_duration);
 
                 loop {
-                    shared_data.poll(self.poll_interval_duration).unwrap();
+                    poller.poll(self.poll_interval_duration).unwrap();
                     interval.tick().await;
                 }
             })
@@ -99,12 +99,12 @@ impl ProviderBuilder {
             std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         {
             let blocking_poll_abort_flag = blocking_poll_abort_flag.clone();
-            let mut shared_data = shared_data.clone();
+            let mut poller = poller.clone();
             tokio::task::spawn_blocking(move || loop {
                 if blocking_poll_abort_flag.load(std::sync::atomic::Ordering::Relaxed) {
                     break;
                 }
-                shared_data
+                poller
                     .blocking_poll(self.blocking_poll_interval_duration)
                     .unwrap();
                 std::thread::sleep(self.blocking_poll_interval_duration);
@@ -133,9 +133,9 @@ struct SendInstruction<M: serde::Serialize> {
 type SharedSendInstructionQueue<M> = shared::Shared<std::collections::VecDeque<SendInstruction<M>>>;
 
 #[derive(Clone)]
-struct ProviderSharedData {
+struct ProviderPoller {
     pub server_context: net::server::SharedServerContext,
-    pub geosphere: geosphere::active_geosphere::SharedActiveGeosphere,
+    pub active_geosphere: geosphere::active_geosphere::SharedActiveGeosphere,
     pub biosphere: biosphere::SharedBiosphere,
     pub chunk_subscription: SharedChunkSubscription,
     pub ready_client_set: SharedReadyClientSet,
@@ -144,7 +144,7 @@ struct ProviderSharedData {
     pub chunk_removal_queue: SharedSendInstructionQueue<channel::ChunkRemovalMessage>,
 }
 
-impl ProviderSharedData {
+impl ProviderPoller {
     const MAX_QUEUE_SEND_PER_POLL: u16 = 32;
 
     pub fn blocking_poll(&mut self, _p_delta: std::time::Duration) -> anyhow::Result<()> {
@@ -222,7 +222,7 @@ impl ProviderSharedData {
                                 continue;
                             }
                             let key = geosphere::chunk::ChunkKey::from(new_point);
-                            let chunk = self.geosphere.lock().unwrap().chunk(&key).clone();
+                            let chunk = self.active_geosphere.lock().unwrap().chunk(&key).clone();
                             self.chunk_insertion_queue
                                 .lock()
                                 .unwrap()
@@ -260,7 +260,7 @@ impl ProviderSharedData {
                         client_id,
                         channel::Channel::PrepareMessage,
                         &channel::PrepareMessage {
-                            cube_registry: self.geosphere.lock().unwrap().cube_registry().clone(),
+                            cube_registry: self.active_geosphere.lock().unwrap().cube_registry().clone(),
                         },
                     );
                     log::info!("Client {} joined.", client_id);

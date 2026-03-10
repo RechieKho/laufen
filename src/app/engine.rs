@@ -1,17 +1,14 @@
 use crate::adapter::renderer::*;
-use crate::adapter::shared;
 use crate::app::arch;
 
 use super::viewport;
-
-pub type ConsumerHandle = arch::pollable::PollHandle<arch::consumer::Consumer>;
 
 #[derive(getset::Getters, getset::MutGetters)]
 pub struct Engine {
     #[getset(get = "pub", get_mut = "pub")]
     viewport: viewport::Viewport,
     #[getset(get = "pub", get_mut = "pub")]
-    consumer_handle: Option<ConsumerHandle>,
+    consumer: Option<arch::consumer::Consumer>,
     #[getset(get = "pub", get_mut = "pub")]
     provider: Option<arch::provider::Provider>,
 
@@ -52,18 +49,17 @@ impl UnsecureEngineBuilder {
             self.provider_builder
                 .build(p_parameters.provider_builder_parameters),
         );
-        let consumer = shared::share(
+        let consumer = Some(
             self.consumer_builder
                 .build(p_parameters.consumer_builder_parameters),
         );
-        let consumer_handle = Some(ConsumerHandle::new(consumer, self.poll_interval_duration));
 
         Ok(Engine {
             viewport,
             last_process_timestamp: std::time::Instant::now(),
             frame_per_second: 0,
             provider,
-            consumer_handle,
+            consumer,
             abort_flag: Default::default(),
         })
     }
@@ -71,17 +67,18 @@ impl UnsecureEngineBuilder {
 
 impl Engine {
     fn handle_consumer_preparation_notice(&mut self) -> anyhow::Result<()> {
-        if let Some(consumer_handle) = self.consumer_handle.as_ref() {
-            let mut consumer = consumer_handle.shared_pollable().lock().unwrap();
-            if let Some(notice) = consumer.take_preparation_notice() {
-                if !notice.geosphere_texture_images.is_empty() {
-                    let builder = viewport::grid_texture_atlas::GridTextureAtlasBuilder {
-                        images: &notice.geosphere_texture_images,
-                        texture_label: Some("Geosphere texture images"),
-                        ..Default::default()
-                    };
-                    self.viewport.update_texture_atlas(builder)?;
-                }
+        if let Some(notice) = self
+            .consumer
+            .as_mut()
+            .and_then(|p_consumer| p_consumer.take_preparation_notice())
+        {
+            if !notice.geosphere_texture_images.is_empty() {
+                let builder = viewport::grid_texture_atlas::GridTextureAtlasBuilder {
+                    images: &notice.geosphere_texture_images,
+                    texture_label: Some("Geosphere texture images"),
+                    ..Default::default()
+                };
+                self.viewport.update_texture_atlas(builder)?;
             }
         }
 
@@ -91,9 +88,8 @@ impl Engine {
     fn close(&mut self, p_event_loop: &winit::event_loop::ActiveEventLoop) {
         self.abort_flag
             .store(true, std::sync::atomic::Ordering::Relaxed);
-        if let Some(handle) = self.consumer_handle.as_ref() {
-            handle.shut_down();
-            handle.shared_pollable().lock().unwrap().disconnect();
+        if let Some(consumer) = self.consumer.as_ref() {
+            consumer.shut_down();
         }
         if let Some(provider) = self.provider.as_ref() {
             provider.shut_down();
@@ -102,12 +98,8 @@ impl Engine {
     }
 
     pub fn render(&mut self) -> anyhow::Result<()> {
-        let quad_instances = if let Some(handle) = self.consumer_handle.as_ref() {
-            handle
-                .shared_pollable()
-                .lock()
-                .unwrap()
-                .spectate(self.abort_flag.clone(), &self.viewport.camera_properties())
+        let quad_instances = if let Some(consumer) = self.consumer.as_mut() {
+            consumer.spectate(self.abort_flag.clone(), &self.viewport.camera_properties())
         } else {
             Vec::default()
         };
