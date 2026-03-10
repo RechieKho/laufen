@@ -1,5 +1,9 @@
+use crate::adapter::shared;
+
 pub mod player;
 pub mod spatial;
+
+pub type SharedBiosphere = shared::Shared<Biosphere>;
 
 #[derive(Default, getset::Getters, getset::MutGetters)]
 pub struct Biosphere {

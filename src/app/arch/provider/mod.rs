@@ -11,16 +11,13 @@ use shipyard::IntoIter;
 pub type SharedProvider = shared::Shared<Provider>;
 
 type ChunkSubscription = rapidhash::RapidHashMap<net::server::ClientId, Vec<glam::IVec3>>;
+type SharedChunkSubscription = shared::Shared<ChunkSubscription>;
 type ReadyClientSet = rapidhash::RapidHashSet<net::server::ClientId>;
+type SharedReadyClientSet = shared::Shared<ReadyClientSet>;
 
 pub struct Provider {
-    server_context: net::server::ServerContext,
-    #[allow(unused)]
-    geosphere: geosphere::active_geosphere::ActiveGeosphere,
-    biosphere: biosphere::Biosphere,
-    chunk_subscription: ChunkSubscription,
-    client_active_chunk_range_radius: u32,
-    ready_client_set: ReadyClientSet,
+    poll_join_handle: tokio::task::JoinHandle<()>,
+    blocking_poll_abort_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 #[derive(partially::Partial)]
@@ -33,6 +30,8 @@ pub struct ProviderBuilder {
     pub connection_available_bytes_per_tick: u64,
     pub geosphere_builder: geosphere::active_geosphere::ActiveGeosphereBuilder,
     pub client_active_chunk_range_radius: u32,
+    pub poll_interval_duration: std::time::Duration,
+    pub blocking_poll_interval_duration: std::time::Duration,
 }
 
 pub struct ProviderBuilderParameters {
@@ -50,6 +49,8 @@ impl ProviderBuilder {
                 geosphere::active_geosphere::ActiveGeosphereBuilder::try_with_sample()?,
             connection_available_bytes_per_tick: 60_000,
             client_active_chunk_range_radius: 5,
+            poll_interval_duration: std::time::Duration::from_millis(16),
+            blocking_poll_interval_duration: std::time::Duration::from_millis(16),
         })
     }
 
@@ -67,25 +68,96 @@ impl ProviderBuilder {
             ..Default::default()
         };
 
-        Provider {
-            server_context: server_context_builder
-                .build(p_parameters.server_context_builder_parameters),
-            geosphere: self.geosphere_builder.build(),
+        let shared_data = ProviderSharedData {
+            server_context: shared::share(
+                server_context_builder.build(p_parameters.server_context_builder_parameters),
+            ),
+            geosphere: shared::share(self.geosphere_builder.build()),
             biosphere: Default::default(),
             chunk_subscription: Default::default(),
-            client_active_chunk_range_radius: self.client_active_chunk_range_radius,
+            client_active_chunk_range_radius: std::sync::Arc::new(
+                std::sync::atomic::AtomicU32::new(self.client_active_chunk_range_radius),
+            ),
             ready_client_set: Default::default(),
+            chunk_insertion_queue: Default::default(),
+            chunk_removal_queue: Default::default(),
+        };
+
+        let poll_join_handle = {
+            let mut shared_data = shared_data.clone();
+            tokio::spawn(async move {
+                let mut interval = tokio::time::interval(self.poll_interval_duration);
+
+                loop {
+                    shared_data.poll(self.poll_interval_duration).unwrap();
+                    interval.tick().await;
+                }
+            })
+        };
+
+        let blocking_poll_abort_flag =
+            std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        {
+            let blocking_poll_abort_flag = blocking_poll_abort_flag.clone();
+            let mut shared_data = shared_data.clone();
+            tokio::task::spawn_blocking(move || loop {
+                if blocking_poll_abort_flag.load(std::sync::atomic::Ordering::Relaxed) {
+                    break;
+                }
+                shared_data
+                    .blocking_poll(self.blocking_poll_interval_duration)
+                    .unwrap();
+                std::thread::sleep(self.blocking_poll_interval_duration);
+            })
+        };
+
+        Provider {
+            poll_join_handle,
+            blocking_poll_abort_flag,
         }
     }
 }
 
 impl Provider {
-    fn handle_client_subscription(&mut self) {
-        self.biosphere.entities().run(
+    pub fn shut_down(&self) {
+        self.poll_join_handle.abort();
+        self.blocking_poll_abort_flag
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+struct SendInstruction<M: serde::Serialize> {
+    pub client_id: net::server::ClientId,
+    pub message: M,
+}
+type SharedSendInstructionQueue<M> = shared::Shared<std::collections::VecDeque<SendInstruction<M>>>;
+
+#[derive(Clone)]
+struct ProviderSharedData {
+    pub server_context: net::server::SharedServerContext,
+    pub geosphere: geosphere::active_geosphere::SharedActiveGeosphere,
+    pub biosphere: biosphere::SharedBiosphere,
+    pub chunk_subscription: SharedChunkSubscription,
+    pub ready_client_set: SharedReadyClientSet,
+    pub client_active_chunk_range_radius: std::sync::Arc<std::sync::atomic::AtomicU32>,
+    pub chunk_insertion_queue: SharedSendInstructionQueue<channel::ChunkInsertionMessage>,
+    pub chunk_removal_queue: SharedSendInstructionQueue<channel::ChunkRemovalMessage>,
+}
+
+impl ProviderSharedData {
+    const MAX_QUEUE_SEND_PER_POLL: u16 = 32;
+
+    pub fn blocking_poll(&mut self, _p_delta: std::time::Duration) -> anyhow::Result<()> {
+        self.biosphere.lock().unwrap().entities().run(
             |p_players: shipyard::View<biosphere::player::Player>,
              p_spatials: shipyard::View<biosphere::spatial::Spatial>| {
                 for (player, spatial) in (&p_players, &p_spatials).iter() {
-                    if !self.ready_client_set.contains(player.client_id()) {
+                    if !self
+                        .ready_client_set
+                        .lock()
+                        .unwrap()
+                        .contains(player.client_id())
+                    {
                         continue;
                     }
 
@@ -98,84 +170,97 @@ impl Provider {
                         geosphere::chunk::ChunkMorton::compute_coordinate(slot_position);
 
                     let chunk_point_cluster = geosphere::point_cluster::PointCluster {
-                        min: chunk_position - self.client_active_chunk_range_radius as i32,
-                        max: chunk_position + self.client_active_chunk_range_radius as i32,
+                        min: chunk_position
+                            - self
+                                .client_active_chunk_range_radius
+                                .load(std::sync::atomic::Ordering::Relaxed)
+                                as i32,
+                        max: chunk_position
+                            + self
+                                .client_active_chunk_range_radius
+                                .load(std::sync::atomic::Ordering::Relaxed)
+                                as i32,
                     };
-                    let player_chunk_subscription = self
-                        .chunk_subscription
-                        .entry(*player.client_id())
-                        .or_default();
-
-                    // TODO: It is too much, it causes the server update to lag for too long, causing
-                    // disconnection. Got to find a way to separate this.
-
-                    //{
-                    //    let chunk_point_set = chunk_point_cluster
-                    //        .into_iter()
-                    //        .collect::<rapidhash::RapidHashSet<glam::IVec3>>();
-                    //    let obsolete_chunk_points = player_chunk_subscription
-                    //        .iter()
-                    //        .copied()
-                    //        .filter(|p_chunk_position| !chunk_point_set.contains(p_chunk_position));
-                    //    let obsolete_chunk_point_set = obsolete_chunk_points
-                    //        .clone()
-                    //        .collect::<rapidhash::RapidHashSet<glam::IVec3>>(
-                    //    );
-                    //    for obsolete_point in obsolete_chunk_points {
-                    //        self.server_context.send_serializable(
-                    //            *player.client_id(),
-                    //            channel::Channel::ChunkRemoval,
-                    //            &channel::ChunkRemovalMessage {
-                    //                key: geosphere::chunk::ChunkKey::from(obsolete_point),
-                    //            },
-                    //        );
-                    //    }
-                    //    player_chunk_subscription.retain(|p_chunk_point| {
-                    //        obsolete_chunk_point_set.contains(p_chunk_point)
-                    //    });
-                    //}
 
                     {
+                        let mut chunk_subscription = self.chunk_subscription.lock().unwrap();
+                        let player_chunk_subscription =
+                            chunk_subscription.entry(*player.client_id()).or_default();
+                        let chunk_point_set = chunk_point_cluster
+                            .into_iter()
+                            .collect::<rapidhash::RapidHashSet<glam::IVec3>>();
+                        let obsolete_chunk_points = player_chunk_subscription
+                            .iter()
+                            .copied()
+                            .filter(|p_chunk_position| !chunk_point_set.contains(p_chunk_position));
+                        let obsolete_chunk_point_set = obsolete_chunk_points
+                            .clone()
+                            .collect::<rapidhash::RapidHashSet<glam::IVec3>>(
+                        );
+                        for obsolete_point in obsolete_chunk_points {
+                            self.chunk_removal_queue
+                                .lock()
+                                .unwrap()
+                                .push_back(SendInstruction {
+                                    client_id: *player.client_id(),
+                                    message: channel::ChunkRemovalMessage {
+                                        key: geosphere::chunk::ChunkKey::from(obsolete_point),
+                                    },
+                                });
+                        }
+                        player_chunk_subscription.retain(|p_chunk_point| {
+                            !obsolete_chunk_point_set.contains(p_chunk_point)
+                        });
+                    }
+
+                    {
+                        let mut chunk_subscription = self.chunk_subscription.lock().unwrap();
+                        let player_chunk_subscription =
+                            chunk_subscription.entry(*player.client_id()).or_default();
                         for new_point in chunk_point_cluster.into_iter() {
                             if player_chunk_subscription.contains(&new_point) {
                                 continue;
                             }
-
                             let key = geosphere::chunk::ChunkKey::from(new_point);
-                            let chunk = self.geosphere.chunk(&key).clone();
-                            self.server_context.send_serializable(
-                                *player.client_id(),
-                                channel::Channel::ChunkInsertion,
-                                &channel::ChunkInsertionMessage { chunk, key },
-                            );
+                            let chunk = self.geosphere.lock().unwrap().chunk(&key).clone();
+                            self.chunk_insertion_queue
+                                .lock()
+                                .unwrap()
+                                .push_back(SendInstruction {
+                                    client_id: *player.client_id(),
+                                    message: channel::ChunkInsertionMessage { chunk, key },
+                                });
                             player_chunk_subscription.push(new_point);
                         }
                     }
                 }
             },
-        )
-    }
-}
+        );
 
-impl super::pollable::Pollable for Provider {
-    fn poll(&mut self, p_delta: std::time::Duration) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    pub fn poll(&mut self, p_delta: std::time::Duration) -> anyhow::Result<()> {
         self.server_context
+            .lock()
+            .unwrap()
             .update(p_delta)
             .map_err(anyhow::Error::msg)?;
 
-        while let Some(event) = self.server_context.get_event() {
-            match event {
+        if let Ok(mut server_context) = self.server_context.try_lock() {
+            while let Some(event) = server_context.get_event() {
+                match event {
                 net::server::ServerEvent::ClientConnected { client_id } => {
-                    self.biosphere.entities_mut().add_entity((
+                    self.biosphere.lock().unwrap().entities_mut().add_entity((
                         biosphere::player::Player::new(client_id),
                         biosphere::spatial::Spatial::default(),
                     ));
 
-                    self.server_context.send_large_serializable(
+                    server_context.send_large_serializable(
                         client_id,
                         channel::Channel::PrepareMessage,
                         &channel::PrepareMessage {
-                            cube_registry: self.geosphere.cube_registry().clone(),
+                            cube_registry: self.geosphere.lock().unwrap().cube_registry().clone(),
                         },
                     );
                     log::info!("Client {} joined.", client_id);
@@ -184,7 +269,7 @@ impl super::pollable::Pollable for Provider {
                 net::server::ServerEvent::ClientDisconnected {
                     client_id,
                     reason: _,
-                } => self.biosphere.entities_mut().run(
+                } => self.biosphere.lock().unwrap().entities_mut().run(
                     |mut p_all_storages: shipyard::AllStoragesViewMut,
                      p_players: shipyard::View<biosphere::player::Player>| {
                         for (id, player) in p_players.iter().with_id() {
@@ -195,22 +280,56 @@ impl super::pollable::Pollable for Provider {
                     },
                 ),
             }
-        }
-
-        for client_id in self.server_context.get_client_ids() {
-            while let Some(_message) = self
-                .server_context
-                .receive_deserializable_from::<consumer::channel::ReadyMessage, _>(
-                    client_id,
-                    consumer::channel::Channel::Ready,
-                )
-            {
-                self.ready_client_set.insert(client_id);
-                log::info!("Client {} ready.", client_id);
             }
         }
 
-        self.handle_client_subscription();
+        if let Ok(mut server_context) = self.server_context.try_lock() {
+            for client_id in server_context.get_client_ids() {
+                while let Some(_message) = server_context
+                    .receive_deserializable_from::<consumer::channel::ReadyMessage, _>(
+                        client_id,
+                        consumer::channel::Channel::Ready,
+                    )
+                {
+                    self.ready_client_set.lock().unwrap().insert(client_id);
+                    log::info!("Client {} ready.", client_id);
+                }
+            }
+        }
+
+        let mut queue_send_count = 0u16;
+
+        while let Ok(mut queue) = self.chunk_insertion_queue.try_lock() {
+            if queue_send_count > Self::MAX_QUEUE_SEND_PER_POLL {
+                break;
+            }
+            if let Some(instruction) = queue.pop_front() {
+                self.server_context.lock().unwrap().send_serializable(
+                    instruction.client_id,
+                    channel::Channel::ChunkInsertion,
+                    &instruction.message,
+                );
+                queue_send_count += 1;
+            } else {
+                break;
+            }
+        }
+
+        while let Ok(mut queue) = self.chunk_removal_queue.try_lock() {
+            if queue_send_count > Self::MAX_QUEUE_SEND_PER_POLL {
+                break;
+            }
+            if let Some(instruction) = queue.pop_front() {
+                self.server_context.lock().unwrap().send_serializable(
+                    instruction.client_id,
+                    channel::Channel::ChunkRemoval,
+                    &instruction.message,
+                );
+                queue_send_count += 1;
+            } else {
+                break;
+            }
+        }
 
         Ok(())
     }

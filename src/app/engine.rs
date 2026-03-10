@@ -5,7 +5,6 @@ use crate::app::arch;
 use super::viewport;
 
 pub type ConsumerHandle = arch::pollable::PollHandle<arch::consumer::Consumer>;
-pub type ProviderHandle = arch::pollable::PollHandle<arch::provider::Provider>;
 
 #[derive(getset::Getters, getset::MutGetters)]
 pub struct Engine {
@@ -14,7 +13,7 @@ pub struct Engine {
     #[getset(get = "pub", get_mut = "pub")]
     consumer_handle: Option<ConsumerHandle>,
     #[getset(get = "pub", get_mut = "pub")]
-    provider_handle: Option<ProviderHandle>,
+    provider: Option<arch::provider::Provider>,
 
     last_process_timestamp: std::time::Instant,
     frame_per_second: u32,
@@ -49,7 +48,7 @@ impl UnsecureEngineBuilder {
         p_parameters: UnsecureEngineBuilderParameters<'a>,
     ) -> anyhow::Result<Engine> {
         let viewport = viewport::Viewport::new(p_parameters.event_loop)?;
-        let provider = shared::share(
+        let provider = Some(
             self.provider_builder
                 .build(p_parameters.provider_builder_parameters),
         );
@@ -57,14 +56,13 @@ impl UnsecureEngineBuilder {
             self.consumer_builder
                 .build(p_parameters.consumer_builder_parameters),
         );
-        let provider_handle = Some(ProviderHandle::new(provider, self.poll_interval_duration));
         let consumer_handle = Some(ConsumerHandle::new(consumer, self.poll_interval_duration));
 
         Ok(Engine {
             viewport,
             last_process_timestamp: std::time::Instant::now(),
             frame_per_second: 0,
-            provider_handle,
+            provider,
             consumer_handle,
             abort_flag: Default::default(),
         })
@@ -97,8 +95,8 @@ impl Engine {
             handle.shut_down();
             handle.shared_pollable().lock().unwrap().disconnect();
         }
-        if let Some(handle) = self.provider_handle.as_ref() {
-            handle.shut_down();
+        if let Some(provider) = self.provider.as_ref() {
+            provider.shut_down();
         }
         p_event_loop.exit();
     }

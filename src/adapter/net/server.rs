@@ -6,6 +6,8 @@ use std::time;
 pub use renet::*;
 pub use renet_netcode::*;
 
+use crate::adapter::shared;
+
 pub const LARGE_PARCEL_DATA_MAX_BYTE_COUNT: u64 = 32;
 pub type LargeParcelData = tinyvec::ArrayVec<[u8; LARGE_PARCEL_DATA_MAX_BYTE_COUNT as usize]>;
 
@@ -37,6 +39,8 @@ struct LargeParcelSendInstruction {
     pub channel_id: u8,
     pub data: LargeParcelData,
 }
+
+pub type SharedServerContext = shared::Shared<ServerContext>;
 
 pub struct ServerContext {
     server: renet::RenetServer,
