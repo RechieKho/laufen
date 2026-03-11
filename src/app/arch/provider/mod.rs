@@ -73,7 +73,7 @@ impl ProviderBuilder {
                 server_context_builder.build(p_parameters.server_context_builder_parameters),
             ),
             active_geosphere: shared::share(self.geosphere_builder.build()),
-            biosphere: Default::default(),
+            active_biosphere: Default::default(),
             chunk_subscription: Default::default(),
             client_active_chunk_range_radius: std::sync::Arc::new(
                 std::sync::atomic::AtomicU32::new(self.client_active_chunk_range_radius),
@@ -136,7 +136,7 @@ type SharedSendInstructionQueue<M> = shared::Shared<std::collections::VecDeque<S
 struct ProviderPoller {
     pub server_context: net::server::SharedServerContext,
     pub active_geosphere: geosphere::active_geosphere::SharedActiveGeosphere,
-    pub biosphere: biosphere::SharedBiosphere,
+    pub active_biosphere: biosphere::active_biosphere::SharedActiveBiosphere,
     pub chunk_subscription: SharedChunkSubscription,
     pub ready_client_set: SharedReadyClientSet,
     pub client_active_chunk_range_radius: std::sync::Arc<std::sync::atomic::AtomicU32>,
@@ -148,7 +148,7 @@ impl ProviderPoller {
     const MAX_QUEUE_SEND_PER_POLL: u16 = 32;
 
     pub fn blocking_poll(&mut self, _p_delta: std::time::Duration) -> anyhow::Result<()> {
-        self.biosphere.lock().unwrap().entities().run(
+        self.active_biosphere.lock().unwrap().entities().run(
             |p_players: shipyard::View<biosphere::player::Player>,
              p_spatials: shipyard::View<biosphere::spatial::Spatial>| {
                 for (player, spatial) in (&p_players, &p_spatials).iter() {
@@ -251,7 +251,7 @@ impl ProviderPoller {
             while let Some(event) = server_context.get_event() {
                 match event {
                 net::server::ServerEvent::ClientConnected { client_id } => {
-                    self.biosphere.lock().unwrap().entities_mut().add_entity((
+                    self.active_biosphere.lock().unwrap().entities_mut().add_entity((
                         biosphere::player::Player::new(client_id),
                         biosphere::spatial::Spatial::default(),
                     ));
@@ -269,7 +269,7 @@ impl ProviderPoller {
                 net::server::ServerEvent::ClientDisconnected {
                     client_id,
                     reason: _,
-                } => self.biosphere.lock().unwrap().entities_mut().run(
+                } => self.active_biosphere.lock().unwrap().entities_mut().run(
                     |mut p_all_storages: shipyard::AllStoragesViewMut,
                      p_players: shipyard::View<biosphere::player::Player>| {
                         for (id, player) in p_players.iter().with_id() {
