@@ -171,7 +171,19 @@ impl ConsumerPoller {
                         .map(|p_image| p_image.clone().to_texture_image().unwrap())
                         .collect::<Vec<renderer::texture::TextureImage>>(),
                 });
-                self.passive_geosphere.lock().unwrap().cube_registry = message.cube_registry;
+                {
+                    let mut geosphere = self.passive_geosphere.lock().unwrap();
+                    let mut spectator = self.spectator.lock().unwrap();
+                    geosphere.cube_registry = message.cube_registry;
+                    for insertion in message.chunk_insertions {
+                        let chunk_position = *insertion.key;
+                        let chunk_slot_point_cluster =
+                            geosphere::chunk::ChunkMorton::compute_cluster(chunk_position);
+                        geosphere.chunk_map.insert(insertion.key, insertion.chunk);
+                        spectator.purge_slot_point_cluster(chunk_slot_point_cluster);
+                    }
+                }
+
                 client_context
                     .send_serializable(channel::Channel::Ready, &channel::ReadyMessage {});
             }

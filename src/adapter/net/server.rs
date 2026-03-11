@@ -255,7 +255,14 @@ impl ServerContext {
         C: Into<u8>,
         M: Into<Bytes>,
     {
-        let p_message = p_message.into();
+        let p_message = {
+            let uncompressed = p_message.into();
+            let mut encoder = snap::raw::Encoder::new();
+            encoder
+                .compress_vec(uncompressed.iter().as_slice())
+                .unwrap()
+        };
+
         let p_channel_id = p_channel_id.into();
         let key = {
             let mut hasher = rapidhash::quality::RapidHasher::default();

@@ -175,6 +175,10 @@ impl ClientContext {
                 let parcel = parcel.unwrap();
                 message.extend_from_slice(parcel.as_slice());
             }
+            let message = {
+                let mut decoder = snap::raw::Decoder::new();
+                decoder.decompress_vec(message.iter().as_slice()).unwrap()
+            };
             return Some(server::Bytes::from(message));
         }
 

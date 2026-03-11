@@ -17,7 +17,7 @@ type SharedReadyClientSet = shared::Shared<ReadyClientSet>;
 
 pub struct Provider {
     poll_join_handle: tokio::task::JoinHandle<()>,
-    blocking_poll_abort_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    abort_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 #[derive(partially::Partial)]
@@ -68,6 +68,8 @@ impl ProviderBuilder {
             ..Default::default()
         };
 
+        let abort_flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+
         let poller = ProviderPoller {
             server_context: shared::share(
                 server_context_builder.build(p_parameters.server_context_builder_parameters),
@@ -81,6 +83,7 @@ impl ProviderBuilder {
             ready_client_set: Default::default(),
             chunk_insertion_queue: Default::default(),
             chunk_removal_queue: Default::default(),
+            abort_flag: abort_flag.clone(),
         };
 
         let poll_join_handle = {
@@ -95,13 +98,11 @@ impl ProviderBuilder {
             })
         };
 
-        let blocking_poll_abort_flag =
-            std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         {
-            let blocking_poll_abort_flag = blocking_poll_abort_flag.clone();
+            let abort_flag = abort_flag.clone();
             let mut poller = poller.clone();
             tokio::task::spawn_blocking(move || loop {
-                if blocking_poll_abort_flag.load(std::sync::atomic::Ordering::Relaxed) {
+                if abort_flag.load(std::sync::atomic::Ordering::Relaxed) {
                     break;
                 }
                 poller
@@ -113,7 +114,7 @@ impl ProviderBuilder {
 
         Provider {
             poll_join_handle,
-            blocking_poll_abort_flag,
+            abort_flag,
         }
     }
 }
@@ -121,7 +122,7 @@ impl ProviderBuilder {
 impl Provider {
     pub fn shut_down(&self) {
         self.poll_join_handle.abort();
-        self.blocking_poll_abort_flag
+        self.abort_flag
             .store(true, std::sync::atomic::Ordering::Relaxed);
     }
 }
@@ -142,6 +143,21 @@ struct ProviderPoller {
     pub client_active_chunk_range_radius: std::sync::Arc<std::sync::atomic::AtomicU32>,
     pub chunk_insertion_queue: SharedSendInstructionQueue<channel::ChunkInsertionMessage>,
     pub chunk_removal_queue: SharedSendInstructionQueue<channel::ChunkRemovalMessage>,
+    pub abort_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+fn compute_active_chunk_point_cluster(
+    p_slot_position: glam::IVec3,
+    p_active_chunk_range_radius: std::sync::Arc<std::sync::atomic::AtomicU32>,
+) -> geosphere::point_cluster::PointCluster {
+    let (chunk_position, _) = geosphere::chunk::ChunkMorton::compute_coordinate(p_slot_position);
+
+    geosphere::point_cluster::PointCluster {
+        min: chunk_position
+            - p_active_chunk_range_radius.load(std::sync::atomic::Ordering::Relaxed) as i32,
+        max: chunk_position
+            + p_active_chunk_range_radius.load(std::sync::atomic::Ordering::Relaxed) as i32,
+    }
 }
 
 impl ProviderPoller {
@@ -166,27 +182,16 @@ impl ProviderPoller {
                         spatial.position.y as i32,
                         spatial.position.z as i32,
                     );
-                    let (chunk_position, _) =
-                        geosphere::chunk::ChunkMorton::compute_coordinate(slot_position);
-
-                    let chunk_point_cluster = geosphere::point_cluster::PointCluster {
-                        min: chunk_position
-                            - self
-                                .client_active_chunk_range_radius
-                                .load(std::sync::atomic::Ordering::Relaxed)
-                                as i32,
-                        max: chunk_position
-                            + self
-                                .client_active_chunk_range_radius
-                                .load(std::sync::atomic::Ordering::Relaxed)
-                                as i32,
-                    };
+                    let active_chunk_point_cluster = compute_active_chunk_point_cluster(
+                        slot_position,
+                        self.client_active_chunk_range_radius.clone(),
+                    );
 
                     {
                         let mut chunk_subscription = self.chunk_subscription.lock().unwrap();
                         let player_chunk_subscription =
                             chunk_subscription.entry(*player.client_id()).or_default();
-                        let chunk_point_set = chunk_point_cluster
+                        let chunk_point_set = active_chunk_point_cluster
                             .into_iter()
                             .collect::<rapidhash::RapidHashSet<glam::IVec3>>();
                         let obsolete_chunk_points = player_chunk_subscription
@@ -217,7 +222,7 @@ impl ProviderPoller {
                         let mut chunk_subscription = self.chunk_subscription.lock().unwrap();
                         let player_chunk_subscription =
                             chunk_subscription.entry(*player.client_id()).or_default();
-                        for new_point in chunk_point_cluster.into_iter() {
+                        for new_point in active_chunk_point_cluster.into_iter() {
                             if player_chunk_subscription.contains(&new_point) {
                                 continue;
                             }
@@ -251,19 +256,63 @@ impl ProviderPoller {
             while let Some(event) = server_context.get_event() {
                 match event {
                 net::server::ServerEvent::ClientConnected { client_id } => {
+                    log::info!("Client {} joined.", client_id);
+                    let spatial = biosphere::spatial::Spatial::default();
+
                     self.active_biosphere.lock().unwrap().entities_mut().add_entity((
                         biosphere::player::Player::new(client_id),
-                        biosphere::spatial::Spatial::default(),
+                            spatial.clone()
                     ));
 
-                    server_context.send_large_serializable(
-                        client_id,
-                        channel::Channel::PrepareMessage,
-                        &channel::PrepareMessage {
-                            cube_registry: self.active_geosphere.lock().unwrap().cube_registry().clone(),
-                        },
-                    );
-                    log::info!("Client {} joined.", client_id);
+
+                    {
+                        let server_context = self.server_context.clone();
+                        let active_chunk_range_radius = self.client_active_chunk_range_radius.clone();
+                        let chunk_subscription = self.chunk_subscription.clone();
+                        let active_geosphere = self.active_geosphere.clone();
+                        let abort_flag = self.abort_flag.clone();
+                        tokio::task::spawn_blocking(move || {
+                            let initial_slot_position = glam::IVec3::new(
+                                spatial.position.x as i32,
+                                spatial.position.y as i32,
+                                spatial.position.z as i32,
+                            );
+
+                            let mut chunk_insertions = Vec::<channel::ChunkInsertionMessage>::default();
+
+                            for new_point in compute_active_chunk_point_cluster(initial_slot_position, active_chunk_range_radius) {
+                                if abort_flag.load(std::sync::atomic::Ordering::Relaxed) {
+                                    return;
+                                }
+
+                                let key = geosphere::chunk::ChunkKey::from(new_point);
+                                let chunk = active_geosphere.lock().unwrap().chunk(&key).clone();
+                                chunk_insertions.push(channel::ChunkInsertionMessage{
+                                    key,
+                                    chunk
+                                });
+                            }
+
+                            {
+                                let mut chunk_subscription = chunk_subscription.lock().unwrap();
+                                let player_chunk_subscription =
+                                    chunk_subscription.entry(client_id).or_default();
+                                chunk_insertions.iter().for_each(|p_message| player_chunk_subscription.push(*p_message.key));
+                            }
+
+                            server_context.lock().unwrap().send_large_serializable(
+                                client_id,
+                                channel::Channel::PrepareMessage,
+                                &channel::PrepareMessage {
+                                    cube_registry: active_geosphere.lock().unwrap().cube_registry().clone(),
+                                    chunk_insertions
+                                },
+                            );
+
+                            log::info!("Client {} preparation sent.", client_id);
+                        });
+                    }
+
                 }
 
                 net::server::ServerEvent::ClientDisconnected {

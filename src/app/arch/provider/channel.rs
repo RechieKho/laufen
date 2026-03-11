@@ -8,6 +8,7 @@ use crate::app::geosphere;
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct PrepareMessage {
     pub cube_registry: geosphere::cube::CubeRegistry,
+    pub chunk_insertions: Vec<ChunkInsertionMessage>,
 }
 
 impl Message for PrepareMessage {
