@@ -1,8 +1,8 @@
 use crate::adapter::net;
-use crate::app::arch::channel_config_builder;
-use crate::app::arch::channel_config_builder::Message;
-use crate::app::arch::channel_config_builder::ReliableOrderedMessage;
-use crate::app::arch::channel_config_builder::ReliableUnorderedMessage;
+use crate::adapter::net::channel_config_builder;
+use crate::adapter::net::channel_config_builder::Message;
+use crate::adapter::net::channel_config_builder::ReliableOrderedMessage;
+use crate::adapter::net::channel_config_builder::ReliableUnorderedMessage;
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct ReadyMessage {}
