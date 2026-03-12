@@ -162,7 +162,7 @@ fn compute_active_chunk_point_cluster(
 }
 
 impl ProviderPoller {
-    const MAX_QUEUE_SEND_PER_POLL: u16 = 32;
+    const MAX_QUEUE_SEND_PER_POLL: u16 = 64;
 
     pub fn blocking_poll(&mut self, _p_delta: std::time::Duration) -> anyhow::Result<()> {
         self.active_biosphere.lock().unwrap().entities().run(

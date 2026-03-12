@@ -8,7 +8,7 @@ pub use renet_netcode::*;
 
 use crate::adapter::shared;
 
-pub const LARGE_PARCEL_DATA_MAX_BYTE_COUNT: u64 = 32;
+pub const LARGE_PARCEL_DATA_MAX_BYTE_COUNT: u64 = 64;
 pub type LargeParcelData = tinyvec::ArrayVec<[u8; LARGE_PARCEL_DATA_MAX_BYTE_COUNT as usize]>;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
@@ -79,7 +79,7 @@ impl Default for ServerContextBuilder {
             overriding_current_time: None,
             overriding_protocol_id: None,
             authentication: ServerAuthentication::Unsecure,
-            parcel_per_update: 16,
+            parcel_per_update: 64,
         }
     }
 }
