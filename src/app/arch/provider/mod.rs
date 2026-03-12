@@ -6,6 +6,7 @@ use crate::adapter::shared;
 use crate::app::biosphere;
 use crate::app::geosphere;
 use crate::app::geosphere::morton::Morton;
+use itertools::Itertools;
 use shipyard::IntoIter;
 
 pub type SharedProvider = shared::Shared<Provider>;
@@ -257,13 +258,10 @@ impl ProviderPoller {
                 match event {
                 net::server::ServerEvent::ClientConnected { client_id } => {
                     log::info!("Client {} joined.", client_id);
+                    let player  = biosphere::player::Player::new(client_id);
                     let spatial = biosphere::spatial::Spatial::default();
 
-                    self.active_biosphere.lock().unwrap().entities_mut().add_entity((
-                        biosphere::player::Player::new(client_id),
-                            spatial.clone()
-                    ));
-
+                    self.active_biosphere.lock().unwrap().entities_mut().add_entity(( player.clone(), spatial.clone()));
 
                     {
                         let server_context = self.server_context.clone();
@@ -305,7 +303,8 @@ impl ProviderPoller {
                                 channel::Channel::PrepareMessage,
                                 &channel::PrepareMessage {
                                     cube_registry: active_geosphere.lock().unwrap().cube_registry().clone(),
-                                    chunk_insertions
+                                    chunk_insertions,
+                                    self_insertion: channel::PlayerInsertionMessage { player, spatial }
                                 },
                             );
 
@@ -377,6 +376,67 @@ impl ProviderPoller {
                 queue_send_count += 1;
             } else {
                 break;
+            }
+        }
+
+        {
+            let client_ids = {
+                let ready_client_set = self.ready_client_set.lock().unwrap();
+                self.server_context
+                    .lock()
+                    .unwrap()
+                    .get_client_ids()
+                    .into_iter()
+                    .filter(|p_client_id| ready_client_set.contains(p_client_id))
+                    .collect_vec()
+            };
+            self.active_biosphere.lock().unwrap().entities().run(
+                |p_players: shipyard::View<biosphere::player::Player>,
+                 p_spatials: shipyard::View<biosphere::spatial::Spatial>| {
+                    for (player, spatial) in (&p_players, &p_spatials).iter() {
+                        for client_id in client_ids.iter() {
+                            self.server_context.lock().unwrap().send_serializable(
+                                *client_id,
+                                channel::Channel::PlayerUpdate,
+                                &channel::PlayerUpdateMessage {
+                                    player: player.clone(),
+                                    spatial: spatial.clone(),
+                                },
+                            );
+                        }
+                    }
+                },
+            );
+        }
+
+        {
+            let mut player_inputs = std::collections::BTreeMap::<
+                net::server::ClientId,
+                consumer::channel::PlayerInputMessage,
+            >::default();
+            if let Ok(mut server_context) = self.server_context.try_lock() {
+                for client_id in server_context.get_client_ids() {
+                    while let Some(message) = server_context
+                        .receive_deserializable_from::<consumer::channel::PlayerInputMessage, _>(
+                            client_id,
+                            consumer::channel::Channel::PlayerInput,
+                        )
+                    {
+                        player_inputs.insert(client_id, message);
+                    }
+                }
+            }
+            if !player_inputs.is_empty() {
+                self.active_biosphere.lock().unwrap().entities_mut().run(|p_players: shipyard::View<biosphere::player::Player>, mut p_spatials: shipyard::ViewMut<biosphere::spatial::Spatial>| {
+                    for (player, spatial) in (&p_players, &mut p_spatials).iter() {
+                        if let Some(input) = player_inputs.remove(player.client_id()) {
+                            if let Some(normalized) = input.direction.try_normalize() {
+                                spatial.direction = normalized;
+                                spatial.position += normalized * 1f32;
+                            }
+                        }
+                    }
+                });
             }
         }
 

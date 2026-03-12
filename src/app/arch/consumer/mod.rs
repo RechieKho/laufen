@@ -1,10 +1,13 @@
 pub mod camera_control;
 pub mod channel;
 
+use shipyard::IntoIter;
+
 use super::provider;
 use crate::adapter::net;
 use crate::adapter::renderer;
 use crate::adapter::shared;
+use crate::app::biosphere;
 use crate::app::geosphere;
 use crate::app::geosphere::morton::Morton;
 use crate::app::geosphere::spectator;
@@ -61,9 +64,11 @@ impl UnsecureConsumerBuilder {
                 client_context_builder.build(p_parameters.client_context_builder_parameters),
             ),
             passive_geosphere: Default::default(),
+            passive_biosphere: Default::default(),
             spectator: Default::default(),
             preparation_notice: Default::default(),
             ready: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            self_entity_id: Default::default(),
         };
 
         let poll_join_handle = {
@@ -97,8 +102,10 @@ impl UnsecureConsumerBuilder {
         Consumer {
             shared_client_context: poller.client_context.clone(),
             shared_passive_geosphere: poller.passive_geosphere.clone(),
+            shared_passive_biosphere: poller.passive_biosphere.clone(),
             shared_spectator: poller.spectator.clone(),
             shared_preparation_notice: poller.preparation_notice.clone(),
+            shared_self_entity_id: poller.self_entity_id.clone(),
             blocking_poll_abort_flag,
             poll_join_handle,
             ready: poller.ready.clone(),
@@ -117,8 +124,10 @@ pub type SharedConsumer = shared::Shared<Consumer>;
 pub struct Consumer {
     shared_client_context: net::client::SharedClientContext,
     shared_passive_geosphere: geosphere::passive_geosphere::SharedPassiveGeosphere,
+    shared_passive_biosphere: biosphere::passive_biosphere::SharedPassiveBiosphere,
     shared_spectator: spectator::SharedSpectator,
     shared_preparation_notice: shared::Shared<Option<ConsumerPreparationNotice>>,
+    shared_self_entity_id: shared::Shared<Option<shipyard::EntityId>>,
 
     blocking_poll_abort_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
     poll_join_handle: tokio::task::JoinHandle<()>,
@@ -189,6 +198,44 @@ impl Consumer {
             0f32,
         );
         self.camera_control.direction = rotation * self.camera_control.direction;
+
+        if let Ok(mut client_context) = self.shared_client_context.try_lock() {
+            let x = if p_input.key_held(winit::keyboard::KeyCode::KeyD) {
+                1f32
+            } else {
+                0f32
+            } - if p_input.key_held(winit::keyboard::KeyCode::KeyA) {
+                1f32
+            } else {
+                0f32
+            };
+            let y = if p_input.key_held(winit::keyboard::KeyCode::KeyE) {
+                1f32
+            } else {
+                0f32
+            } - if p_input.key_held(winit::keyboard::KeyCode::KeyQ) {
+                1f32
+            } else {
+                0f32
+            };
+            let z = if p_input.key_held(winit::keyboard::KeyCode::KeyS) {
+                1f32
+            } else {
+                0f32
+            } - if p_input.key_held(winit::keyboard::KeyCode::KeyW) {
+                1f32
+            } else {
+                0f32
+            };
+
+            let input_direction = glam::Vec3::new(x, y, z);
+            client_context.send_serializable(
+                channel::Channel::PlayerInput,
+                &channel::PlayerInputMessage {
+                    direction: input_direction,
+                },
+            );
+        }
     }
 
     pub fn camera_spatial(&self) -> CameraSpatial {
@@ -196,8 +243,14 @@ impl Consumer {
             return Default::default();
         }
 
+        let entity_id = self.shared_self_entity_id.lock().unwrap().unwrap();
+        let biosphere = self.shared_passive_biosphere.lock().unwrap();
+        let spatial = biosphere
+            .entities()
+            .get::<&biosphere::spatial::Spatial>(entity_id)
+            .unwrap();
         CameraSpatial {
-            origin: glam::Vec3::default(), // Need to based on player's position.
+            origin: spatial.position,
             direction: self.camera_control.direction,
         }
     }
@@ -207,9 +260,11 @@ impl Consumer {
 struct ConsumerPoller {
     pub client_context: net::client::SharedClientContext,
     pub passive_geosphere: geosphere::passive_geosphere::SharedPassiveGeosphere,
+    pub passive_biosphere: biosphere::passive_biosphere::SharedPassiveBiosphere,
     pub preparation_notice: shared::Shared<Option<ConsumerPreparationNotice>>,
     pub spectator: spectator::SharedSpectator,
     pub ready: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    pub self_entity_id: shared::Shared<Option<shipyard::EntityId>>,
 }
 
 impl ConsumerPoller {
@@ -247,9 +302,19 @@ impl ConsumerPoller {
                         spectator.purge_slot_point_cluster(chunk_slot_point_cluster);
                     }
                 }
+                let entity_id = self
+                    .passive_biosphere
+                    .lock()
+                    .unwrap()
+                    .entities_mut()
+                    .add_entity((
+                        message.self_insertion.player,
+                        message.self_insertion.spatial,
+                    ));
 
                 client_context
                     .send_serializable(channel::Channel::Ready, &channel::ReadyMessage {});
+                *self.self_entity_id.lock().unwrap() = Some(entity_id);
                 self.ready.store(true, std::sync::atomic::Ordering::Relaxed);
             }
             return Ok(());
@@ -288,6 +353,33 @@ impl ConsumerPoller {
                 .unwrap()
                 .chunk_map
                 .remove(&message.key);
+        }
+
+        {
+            let mut player_updates = std::collections::BTreeMap::<
+                biosphere::player::Player,
+                biosphere::spatial::Spatial,
+            >::default();
+            while let Some(message) = self
+                .client_context
+                .lock()
+                .unwrap()
+                .receive_deserializable::<provider::channel::PlayerUpdateMessage, _>(
+                provider::channel::Channel::PlayerUpdate,
+            ) {
+                player_updates.insert(message.player, message.spatial);
+            }
+
+            self.passive_biosphere.lock().unwrap().entities_mut().run(
+                |p_players: shipyard::View<biosphere::player::Player>,
+                 mut p_spatials: shipyard::ViewMut<biosphere::spatial::Spatial>| {
+                    for (player, spatial) in (&p_players, &mut p_spatials).iter() {
+                        if let Some(updated_spatial) = player_updates.remove(player) {
+                            *spatial = updated_spatial;
+                        }
+                    }
+                },
+            )
         }
 
         Ok(())

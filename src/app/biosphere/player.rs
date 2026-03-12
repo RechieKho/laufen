@@ -1,6 +1,16 @@
 use crate::adapter::net;
 
-#[derive(shipyard::Component, getset::Getters)]
+#[derive(
+    shipyard::Component,
+    getset::Getters,
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    PartialOrd,
+    Ord,
+    PartialEq,
+    Eq,
+)]
 pub struct Player {
     #[getset(get = "pub")]
     client_id: net::server::ClientId,

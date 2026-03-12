@@ -11,8 +11,17 @@ impl ReliableUnorderedMessage for ReadyMessage {}
 impl ReliableOrderedMessage for ReadyMessage {}
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct PlayerInputMessage {
+    pub direction: glam::Vec3,
+}
+impl Message for PlayerInputMessage {
+    const MAX_COUNT: usize = 1024;
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub enum Channel {
     Ready,
+    PlayerInput,
 }
 
 impl From<Channel> for u8 {
@@ -24,13 +33,19 @@ impl From<Channel> for u8 {
 impl Channel {
     pub fn channel_id(&self) -> u8 {
         match self {
-            Self::Ready => u8::MAX,
+            Self::Ready => 0,
+            Self::PlayerInput => 1,
         }
     }
 
     pub fn channels_config() -> Vec<net::server::ChannelConfig> {
-        vec![channel_config_builder::channel_config_reliable_ordered::<
-            ReadyMessage,
-        >(Channel::Ready.into())]
+        vec![
+            channel_config_builder::channel_config_reliable_ordered::<ReadyMessage>(
+                Channel::Ready.into(),
+            ),
+            channel_config_builder::channel_config_unreliable::<PlayerInputMessage>(
+                Channel::PlayerInput.into(),
+            ),
+        ]
     }
 }
