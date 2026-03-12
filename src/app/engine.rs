@@ -14,6 +14,7 @@ pub struct Engine {
 
     last_process_timestamp: std::time::Instant,
     frame_per_second: u32,
+    current_resolution: (u32, u32),
     abort_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
@@ -53,6 +54,8 @@ impl UnsecureEngineBuilder {
             self.consumer_builder
                 .build(p_parameters.consumer_builder_parameters),
         );
+        let window_inner_size = viewport.rendering_server().window().inner_size();
+        let current_resolution = (window_inner_size.width, window_inner_size.height);
 
         Ok(Engine {
             viewport,
@@ -60,19 +63,19 @@ impl UnsecureEngineBuilder {
             frame_per_second: 0,
             provider,
             consumer,
+            current_resolution,
             abort_flag: Default::default(),
         })
     }
 }
 
 impl Engine {
-    fn handle_consumer_preparation_notice(&mut self) -> anyhow::Result<()> {
-        if let Some(notice) = self
-            .consumer
-            .as_mut()
-            .and_then(|p_consumer| p_consumer.take_preparation_notice())
-        {
-            if !notice.geosphere_texture_images.is_empty() {
+    fn poll_handle_consumer(
+        &mut self,
+        p_input: &winit_input_helper::WinitInputHelper,
+    ) -> anyhow::Result<()> {
+        if let Some(consumer) = self.consumer.as_mut() {
+            if let Some(notice) = consumer.take_preparation_notice() {
                 let builder = viewport::grid_texture_atlas::GridTextureAtlasBuilder {
                     images: &notice.geosphere_texture_images,
                     texture_label: Some("Geosphere texture images"),
@@ -80,6 +83,15 @@ impl Engine {
                 };
                 self.viewport.update_texture_atlas(builder)?;
             }
+
+            consumer.poll_handle_input(p_input, self.current_resolution);
+            let camera_spatial = consumer.camera_spatial();
+            self.viewport
+                .set_camera_properties(viewport::PartialViewportCameraProperties {
+                    origin: Some(camera_spatial.origin),
+                    direction: Some(camera_spatial.direction),
+                    ..Default::default()
+                });
         }
 
         Ok(())
@@ -132,56 +144,10 @@ impl Engine {
 
         if let Some((width, height)) = p_input.resolution() {
             self.viewport.resize(width, height);
+            self.current_resolution = (width, height);
         }
 
-        self.handle_consumer_preparation_notice().unwrap();
-
-        let camera_properties = self.viewport.camera_properties();
-
-        const LINEAR_SPEED: f32 = 0.2;
-        const ANGULAR_SPEED: f32 = std::f32::consts::PI / 100.0;
-
-        if p_input.key_held(winit::keyboard::KeyCode::KeyW) {
-            self.viewport
-                .set_camera_properties(viewport::PartialViewportCameraProperties {
-                    origin: Some(
-                        camera_properties.origin + camera_properties.direction * LINEAR_SPEED,
-                    ),
-                    ..Default::default()
-                });
-        } else if p_input.key_held(winit::keyboard::KeyCode::KeyS) {
-            self.viewport
-                .set_camera_properties(viewport::PartialViewportCameraProperties {
-                    origin: Some(
-                        camera_properties.origin - camera_properties.direction * LINEAR_SPEED,
-                    ),
-                    ..Default::default()
-                });
-        } else if p_input.key_held(winit::keyboard::KeyCode::KeyA) {
-            self.viewport
-                .set_camera_properties(viewport::PartialViewportCameraProperties {
-                    direction: Some(camera_properties.direction.rotate_y(ANGULAR_SPEED)),
-                    ..Default::default()
-                });
-        } else if p_input.key_held(winit::keyboard::KeyCode::KeyD) {
-            self.viewport
-                .set_camera_properties(viewport::PartialViewportCameraProperties {
-                    direction: Some(camera_properties.direction.rotate_y(-ANGULAR_SPEED)),
-                    ..Default::default()
-                });
-        } else if p_input.key_held(winit::keyboard::KeyCode::KeyQ) {
-            self.viewport
-                .set_camera_properties(viewport::PartialViewportCameraProperties {
-                    origin: Some(camera_properties.origin - glam::Vec3::Y * LINEAR_SPEED),
-                    ..Default::default()
-                });
-        } else if p_input.key_held(winit::keyboard::KeyCode::KeyE) {
-            self.viewport
-                .set_camera_properties(viewport::PartialViewportCameraProperties {
-                    origin: Some(camera_properties.origin - glam::Vec3::NEG_Y * LINEAR_SPEED),
-                    ..Default::default()
-                });
-        }
+        self.poll_handle_consumer(p_input).unwrap();
 
         self.last_process_timestamp = current_process_timestamp;
     }
