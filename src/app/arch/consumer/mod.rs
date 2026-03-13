@@ -75,10 +75,14 @@ impl UnsecureConsumerBuilder {
             let mut poller = poller.clone();
             tokio::spawn(async move {
                 let mut interval = tokio::time::interval(self.poll_interval_duration);
+                let mut last_timestamp = std::time::Instant::now();
 
                 loop {
-                    poller.poll(self.poll_interval_duration).unwrap();
+                    let current_timestamp = std::time::Instant::now();
+                    let delta = current_timestamp.duration_since(last_timestamp);
+                    poller.poll(delta).unwrap();
                     interval.tick().await;
+                    last_timestamp = current_timestamp;
                 }
             })
         };

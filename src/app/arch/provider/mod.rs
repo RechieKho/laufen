@@ -445,7 +445,7 @@ impl ProviderPoller {
                         if let Some(input) = player_inputs.remove(player.client_id()) {
                             if let Some(normalized) = input.direction.try_normalize() {
                                 spatial.direction = normalized;
-                                spatial.position += normalized * 50f32 * p_delta.as_secs_f32();
+                                spatial.position += normalized * 20f32 * p_delta.as_secs_f32();
                             }
                         }
                     }
