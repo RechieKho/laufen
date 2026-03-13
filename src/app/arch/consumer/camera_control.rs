@@ -3,10 +3,16 @@ pub struct CameraControl {
     pub view: CameraControlPersonView,
 }
 
+#[derive(Default)]
 pub enum CameraControlPersonView {
+    #[default]
     FirstPerson,
-    SecondPerson { max_extension: f32 },
-    ThirdPerson { max_extension: f32 },
+    SecondPerson {
+        max_extension: f32,
+    },
+    ThirdPerson {
+        max_extension: f32,
+    },
 }
 
 impl Default for CameraControl {

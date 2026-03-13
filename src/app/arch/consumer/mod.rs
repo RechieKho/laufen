@@ -23,7 +23,7 @@ pub struct UnsecureConsumerBuilder {
     pub connection_available_bytes_per_tick: u64,
     pub poll_interval_duration: std::time::Duration,
     pub blocking_poll_interval_duration: std::time::Duration,
-    pub initial_camera_control: camera_control::CameraControl,
+    pub initial_camera_direction_rotation: glam::Vec2,
     pub initial_camera_sensitivity: f32,
 }
 
@@ -36,7 +36,7 @@ impl Default for UnsecureConsumerBuilder {
             connection_available_bytes_per_tick: 60_000,
             poll_interval_duration: std::time::Duration::from_millis(16),
             blocking_poll_interval_duration: std::time::Duration::from_millis(16),
-            initial_camera_control: Default::default(),
+            initial_camera_direction_rotation: Default::default(),
             initial_camera_sensitivity: 7f32,
         }
     }
@@ -113,7 +113,7 @@ impl UnsecureConsumerBuilder {
             blocking_poll_abort_flag,
             poll_join_handle,
             ready: poller.ready.clone(),
-            camera_control: self.initial_camera_control,
+            camera_direction_rotation: self.initial_camera_direction_rotation,
             camera_sensitivity: self.initial_camera_sensitivity,
         }
     }
@@ -137,7 +137,7 @@ pub struct Consumer {
     poll_join_handle: tokio::task::JoinHandle<()>,
 
     ready: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    camera_control: camera_control::CameraControl,
+    camera_direction_rotation: glam::Vec2,
     pub camera_sensitivity: f32,
 }
 
@@ -195,13 +195,15 @@ impl Consumer {
         let (width, height) = p_current_resolution;
 
         let (yaw, pitch) = p_input.mouse_diff();
-        let rotation = glam::Quat::from_euler(
-            glam::EulerRot::YXZ,
-            -yaw / width as f32 * self.camera_sensitivity,
-            -pitch / height as f32 * self.camera_sensitivity,
-            0f32,
+        self.camera_direction_rotation = glam::Vec2::new(
+            (self.camera_direction_rotation.x - pitch / height as f32 * self.camera_sensitivity)
+                .clamp(
+                    -std::f32::consts::PI / 2f32 + 0.001,
+                    std::f32::consts::PI / 2f32 - 0.001,
+                ),
+            (self.camera_direction_rotation.y - yaw / width as f32 * self.camera_sensitivity)
+                % (std::f32::consts::TAU),
         );
-        self.camera_control.direction = rotation * self.camera_control.direction;
 
         if let Ok(mut client_context) = self.shared_client_context.try_lock() {
             let x = if p_input.key_held(winit::keyboard::KeyCode::KeyD) {
@@ -233,10 +235,16 @@ impl Consumer {
             };
 
             let input_direction = glam::Vec3::new(x, y, z);
+            let rotation = glam::Quat::from_euler(
+                glam::EulerRot::YXZ,
+                self.camera_direction_rotation.y,
+                self.camera_direction_rotation.x,
+                0f32,
+            );
             client_context.send_serializable(
                 channel::Channel::PlayerInput,
                 &channel::PlayerInputMessage {
-                    direction: input_direction,
+                    direction: rotation * input_direction,
                 },
             );
         }
@@ -253,9 +261,15 @@ impl Consumer {
             .entities()
             .get::<&biosphere::spatial::Spatial>(entity_id)
             .unwrap();
+        let rotation = glam::Quat::from_euler(
+            glam::EulerRot::YXZ,
+            self.camera_direction_rotation.y,
+            self.camera_direction_rotation.x,
+            0f32,
+        );
         CameraSpatial {
             origin: spatial.position,
-            direction: self.camera_control.direction,
+            direction: rotation * glam::Vec3::NEG_Z,
         }
     }
 }
