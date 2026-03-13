@@ -348,11 +348,18 @@ impl ConsumerPoller {
             .receive_deserializable::<provider::channel::ChunkRemovalMessage, _>(
             provider::channel::Channel::ChunkRemoval,
         ) {
+            let chunk_position = *message.key;
+            let chunk_slot_point_cluster =
+                geosphere::chunk::ChunkMorton::compute_cluster(chunk_position);
             self.passive_geosphere
                 .lock()
                 .unwrap()
                 .chunk_map
                 .remove(&message.key);
+            self.spectator
+                .lock()
+                .unwrap()
+                .purge_slot_point_cluster(chunk_slot_point_cluster);
         }
 
         {
