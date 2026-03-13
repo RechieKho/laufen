@@ -91,10 +91,14 @@ impl ProviderBuilder {
             let mut poller = poller.clone();
             tokio::spawn(async move {
                 let mut interval = tokio::time::interval(self.poll_interval_duration);
+                let mut last_timestamp = std::time::Instant::now();
 
                 loop {
-                    poller.poll(self.poll_interval_duration).unwrap();
+                    let current_timestamp = std::time::Instant::now();
+                    let delta = current_timestamp.duration_since(last_timestamp);
+                    poller.poll(delta).unwrap();
                     interval.tick().await;
+                    last_timestamp = current_timestamp;
                 }
             })
         };
@@ -102,14 +106,19 @@ impl ProviderBuilder {
         {
             let abort_flag = abort_flag.clone();
             let mut poller = poller.clone();
-            tokio::task::spawn_blocking(move || loop {
-                if abort_flag.load(std::sync::atomic::Ordering::Relaxed) {
-                    break;
+            tokio::task::spawn_blocking(move || {
+                let mut last_timestamp = std::time::Instant::now();
+
+                loop {
+                    if abort_flag.load(std::sync::atomic::Ordering::Relaxed) {
+                        break;
+                    }
+                    let current_timestamp = std::time::Instant::now();
+                    let delta = current_timestamp.duration_since(last_timestamp);
+                    poller.blocking_poll(delta).unwrap();
+                    std::thread::sleep(self.blocking_poll_interval_duration);
+                    last_timestamp = current_timestamp;
                 }
-                poller
-                    .blocking_poll(self.blocking_poll_interval_duration)
-                    .unwrap();
-                std::thread::sleep(self.blocking_poll_interval_duration);
             })
         };
 
@@ -165,83 +174,87 @@ impl ProviderPoller {
     const MAX_QUEUE_SEND_PER_POLL: u16 = 64;
 
     pub fn blocking_poll(&mut self, _p_delta: std::time::Duration) -> anyhow::Result<()> {
+        let mut player_spatial_pairs =
+            Vec::<(biosphere::player::Player, biosphere::spatial::Spatial)>::default();
         self.active_biosphere.lock().unwrap().entities().run(
             |p_players: shipyard::View<biosphere::player::Player>,
              p_spatials: shipyard::View<biosphere::spatial::Spatial>| {
                 for (player, spatial) in (&p_players, &p_spatials).iter() {
-                    if !self
-                        .ready_client_set
-                        .lock()
-                        .unwrap()
-                        .contains(player.client_id())
-                    {
-                        continue;
-                    }
-
-                    let slot_position = glam::IVec3::new(
-                        spatial.position.x as i32,
-                        spatial.position.y as i32,
-                        spatial.position.z as i32,
-                    );
-                    let active_chunk_point_cluster = compute_active_chunk_point_cluster(
-                        slot_position,
-                        self.client_active_chunk_range_radius.clone(),
-                    );
-
-                    {
-                        let mut chunk_subscription = self.chunk_subscription.lock().unwrap();
-                        let player_chunk_subscription =
-                            chunk_subscription.entry(*player.client_id()).or_default();
-                        let chunk_point_set = active_chunk_point_cluster
-                            .into_iter()
-                            .collect::<rapidhash::RapidHashSet<glam::IVec3>>();
-                        let obsolete_chunk_points = player_chunk_subscription
-                            .iter()
-                            .copied()
-                            .filter(|p_chunk_position| !chunk_point_set.contains(p_chunk_position));
-                        let obsolete_chunk_point_set = obsolete_chunk_points
-                            .clone()
-                            .collect::<rapidhash::RapidHashSet<glam::IVec3>>(
-                        );
-                        for obsolete_point in obsolete_chunk_points {
-                            self.chunk_removal_queue
-                                .lock()
-                                .unwrap()
-                                .push_back(SendInstruction {
-                                    client_id: *player.client_id(),
-                                    message: channel::ChunkRemovalMessage {
-                                        key: geosphere::chunk::ChunkKey::from(obsolete_point),
-                                    },
-                                });
-                        }
-                        player_chunk_subscription.retain(|p_chunk_point| {
-                            !obsolete_chunk_point_set.contains(p_chunk_point)
-                        });
-                    }
-
-                    {
-                        let mut chunk_subscription = self.chunk_subscription.lock().unwrap();
-                        let player_chunk_subscription =
-                            chunk_subscription.entry(*player.client_id()).or_default();
-                        for new_point in active_chunk_point_cluster.into_iter() {
-                            if player_chunk_subscription.contains(&new_point) {
-                                continue;
-                            }
-                            let key = geosphere::chunk::ChunkKey::from(new_point);
-                            let chunk = self.active_geosphere.lock().unwrap().chunk(&key).clone();
-                            self.chunk_insertion_queue
-                                .lock()
-                                .unwrap()
-                                .push_back(SendInstruction {
-                                    client_id: *player.client_id(),
-                                    message: channel::ChunkInsertionMessage { chunk, key },
-                                });
-                            player_chunk_subscription.push(new_point);
-                        }
-                    }
+                    player_spatial_pairs.push((player.clone(), spatial.clone()));
                 }
             },
         );
+
+        for (player, spatial) in player_spatial_pairs {
+            if !self
+                .ready_client_set
+                .lock()
+                .unwrap()
+                .contains(player.client_id())
+            {
+                continue;
+            }
+
+            let slot_position = glam::IVec3::new(
+                spatial.position.x as i32,
+                spatial.position.y as i32,
+                spatial.position.z as i32,
+            );
+            let active_chunk_point_cluster = compute_active_chunk_point_cluster(
+                slot_position,
+                self.client_active_chunk_range_radius.clone(),
+            );
+
+            {
+                let mut chunk_subscription = self.chunk_subscription.lock().unwrap();
+                let player_chunk_subscription =
+                    chunk_subscription.entry(*player.client_id()).or_default();
+                let chunk_point_set = active_chunk_point_cluster
+                    .into_iter()
+                    .collect::<rapidhash::RapidHashSet<glam::IVec3>>();
+                let obsolete_chunk_points = player_chunk_subscription
+                    .iter()
+                    .copied()
+                    .filter(|p_chunk_position| !chunk_point_set.contains(p_chunk_position));
+                let obsolete_chunk_point_set = obsolete_chunk_points
+                    .clone()
+                    .collect::<rapidhash::RapidHashSet<glam::IVec3>>();
+                for obsolete_point in obsolete_chunk_points {
+                    self.chunk_removal_queue
+                        .lock()
+                        .unwrap()
+                        .push_back(SendInstruction {
+                            client_id: *player.client_id(),
+                            message: channel::ChunkRemovalMessage {
+                                key: geosphere::chunk::ChunkKey::from(obsolete_point),
+                            },
+                        });
+                }
+                player_chunk_subscription
+                    .retain(|p_chunk_point| !obsolete_chunk_point_set.contains(p_chunk_point));
+            }
+
+            {
+                let mut chunk_subscription = self.chunk_subscription.lock().unwrap();
+                let player_chunk_subscription =
+                    chunk_subscription.entry(*player.client_id()).or_default();
+                for new_point in active_chunk_point_cluster.into_iter() {
+                    if player_chunk_subscription.contains(&new_point) {
+                        continue;
+                    }
+                    let key = geosphere::chunk::ChunkKey::from(new_point);
+                    let chunk = self.active_geosphere.lock().unwrap().chunk(&key).clone();
+                    self.chunk_insertion_queue
+                        .lock()
+                        .unwrap()
+                        .push_back(SendInstruction {
+                            client_id: *player.client_id(),
+                            message: channel::ChunkInsertionMessage { chunk, key },
+                        });
+                    player_chunk_subscription.push(new_point);
+                }
+            }
+        }
 
         Ok(())
     }
@@ -432,7 +445,7 @@ impl ProviderPoller {
                         if let Some(input) = player_inputs.remove(player.client_id()) {
                             if let Some(normalized) = input.direction.try_normalize() {
                                 spatial.direction = normalized;
-                                spatial.position += normalized * 1f32;
+                                spatial.position += normalized * 50f32 * p_delta.as_secs_f32();
                             }
                         }
                     }
