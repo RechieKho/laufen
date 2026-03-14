@@ -116,15 +116,19 @@ impl Engine {
             Vec::default()
         };
 
-        let frame_per_second_text = format!("FPS: {}", self.frame_per_second);
-        let frame_per_second_text = text::Text::new(frame_per_second_text.as_str())
+        let info_text = format!(
+            "FPS: {}\nCamera Position: {}",
+            self.frame_per_second,
+            self.viewport.camera_properties().origin
+        );
+        let info_text = text::Text::new(info_text.as_str())
             .with_scale(24.0)
             .with_color([1.0, 1.0, 1.0, 1.0]);
-        let section = text::TextSection::default().add_text(frame_per_second_text);
+        let info_section = text::TextSection::default().add_text(info_text);
 
         self.viewport.render(viewport::ViewportRenderParameters {
             quad_instances: quad_instances.as_slice(),
-            text_sections: &[section],
+            text_sections: &[info_section],
         })
     }
 
