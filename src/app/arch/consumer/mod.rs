@@ -77,12 +77,15 @@ impl UnsecureConsumerBuilder {
                 let mut interval = tokio::time::interval(self.poll_interval_duration);
                 let mut last_timestamp = std::time::Instant::now();
 
+                interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+                interval.tick().await;
+
                 loop {
                     let current_timestamp = std::time::Instant::now();
                     let delta = current_timestamp.duration_since(last_timestamp);
+                    last_timestamp = current_timestamp;
                     poller.poll(delta).unwrap();
                     interval.tick().await;
-                    last_timestamp = current_timestamp;
                 }
             })
         };

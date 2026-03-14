@@ -93,12 +93,15 @@ impl ProviderBuilder {
                 let mut interval = tokio::time::interval(self.poll_interval_duration);
                 let mut last_timestamp = std::time::Instant::now();
 
+                interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+                interval.tick().await;
+
                 loop {
                     let current_timestamp = std::time::Instant::now();
                     let delta = current_timestamp.duration_since(last_timestamp);
+                    last_timestamp = current_timestamp;
                     poller.poll(delta).unwrap();
                     interval.tick().await;
-                    last_timestamp = current_timestamp;
                 }
             })
         };
@@ -115,9 +118,9 @@ impl ProviderBuilder {
                     }
                     let current_timestamp = std::time::Instant::now();
                     let delta = current_timestamp.duration_since(last_timestamp);
+                    last_timestamp = current_timestamp;
                     poller.blocking_poll(delta).unwrap();
                     std::thread::sleep(self.blocking_poll_interval_duration);
-                    last_timestamp = current_timestamp;
                 }
             })
         };
@@ -445,7 +448,7 @@ impl ProviderPoller {
                         if let Some(input) = player_inputs.remove(player.client_id()) {
                             if let Some(normalized) = input.direction.try_normalize() {
                                 spatial.direction = normalized;
-                                spatial.position += normalized * 20f32 * p_delta.as_secs_f32();
+                                spatial.position += normalized * 10f32 / (p_delta.as_millis() as f32);
                             }
                         }
                     }
