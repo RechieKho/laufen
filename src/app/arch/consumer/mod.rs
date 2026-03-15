@@ -290,6 +290,8 @@ struct ConsumerPoller {
 }
 
 impl ConsumerPoller {
+    const SPATIAL_LERP_WEIGHT: f32 = 0.2;
+
     pub fn poll(&mut self, p_delta: std::time::Duration) -> anyhow::Result<()> {
         self.client_context
             .lock()
@@ -383,7 +385,14 @@ impl ConsumerPoller {
                  mut p_spatials: shipyard::ViewMut<biosphere::spatial::Spatial>| {
                     for (player, spatial) in (&p_players, &mut p_spatials).iter() {
                         if let Some(updated_spatial) = player_updates.remove(player) {
-                            *spatial = updated_spatial;
+                            *spatial = biosphere::spatial::Spatial {
+                                position: spatial
+                                    .position
+                                    .lerp(updated_spatial.position, Self::SPATIAL_LERP_WEIGHT),
+                                direction: spatial
+                                    .direction
+                                    .lerp(updated_spatial.direction, Self::SPATIAL_LERP_WEIGHT),
+                            }
                         }
                     }
                 },

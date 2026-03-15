@@ -139,6 +139,7 @@ impl Engine {
     ) {
         let current_process_timestamp = std::time::Instant::now();
         let delta = current_process_timestamp.duration_since(self.last_process_timestamp);
+        self.last_process_timestamp = current_process_timestamp;
         self.frame_per_second = (1.0 / delta.as_secs_f32()) as _;
 
         if p_input.close_requested() {
@@ -152,7 +153,5 @@ impl Engine {
         }
 
         self.poll_handle_consumer(p_input).unwrap();
-
-        self.last_process_timestamp = current_process_timestamp;
     }
 }
