@@ -172,7 +172,7 @@ fn compute_active_chunk_point_cluster(
 }
 
 impl ProviderPoller {
-    const MAX_QUEUE_SEND_PER_POLL: u16 = 64;
+    const MAX_QUEUE_SEND_PER_POLL: u16 = 128;
 
     pub fn blocking_poll(&mut self, _p_delta: std::time::Duration) -> anyhow::Result<()> {
         let mut player_spatial_pairs =
@@ -408,7 +408,7 @@ impl ProviderPoller {
                         if let Some(input) = player_inputs.remove(player.client_id()) {
                             if let Some(normalized) = input.direction.try_normalize() {
                                 spatial.direction = normalized;
-                                spatial.position += normalized * 10f32 / (p_delta.as_millis() as f32);
+                                spatial.position += normalized * 5f32 / (p_delta.as_millis() as f32);
                             }
                         }
                     }
