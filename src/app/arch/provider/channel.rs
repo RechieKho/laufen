@@ -9,7 +9,7 @@ use crate::app::geosphere;
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct PrepareMessage {
     pub cube_registry: geosphere::cube::CubeRegistry,
-    pub chunk_insertions: Vec<ChunkInsertionMessage>,
+    pub chunk_updates: Vec<ChunkUpdateMessage>,
     pub self_insertion: PlayerInsertionMessage,
 }
 impl Message for PrepareMessage {
@@ -19,23 +19,14 @@ impl ReliableUnorderedMessage for PrepareMessage {}
 impl ReliableOrderedMessage for PrepareMessage {}
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
-pub struct ChunkInsertionMessage {
+pub struct ChunkUpdateMessage {
     pub key: geosphere::chunk::ChunkKey,
     pub chunk: geosphere::chunk::Chunk,
 }
-impl Message for ChunkInsertionMessage {
+impl Message for ChunkUpdateMessage {
     const MAX_COUNT: usize = 512;
 }
-impl ReliableUnorderedMessage for ChunkInsertionMessage {}
-
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
-pub struct ChunkRemovalMessage {
-    pub key: geosphere::chunk::ChunkKey,
-}
-impl Message for ChunkRemovalMessage {
-    const MAX_COUNT: usize = 512;
-}
-impl ReliableUnorderedMessage for ChunkRemovalMessage {}
+impl ReliableUnorderedMessage for ChunkUpdateMessage {}
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct PlayerInsertionMessage {
@@ -58,8 +49,7 @@ impl Message for PlayerUpdateMessage {
 
 pub enum Channel {
     PrepareMessage,
-    ChunkInsertion,
-    ChunkRemoval,
+    ChunkUpdate,
     PlayerInsertion,
     PlayerUpdate,
 }
@@ -74,10 +64,9 @@ impl Channel {
     pub fn channel_id(&self) -> u8 {
         match self {
             Self::PrepareMessage => 0,
-            Self::ChunkInsertion => 1,
-            Self::ChunkRemoval => 2,
-            Self::PlayerInsertion => 3,
-            Self::PlayerUpdate => 4,
+            Self::ChunkUpdate => 1,
+            Self::PlayerInsertion => 2,
+            Self::PlayerUpdate => 3,
         }
     }
 
@@ -86,11 +75,8 @@ impl Channel {
             channel_config_builder::channel_config_large::<PrepareMessage>(
                 Self::PrepareMessage.into(),
             ),
-            channel_config_builder::channel_config_reliable_unordered::<ChunkInsertionMessage>(
-                Self::ChunkInsertion.into(),
-            ),
-            channel_config_builder::channel_config_reliable_unordered::<ChunkRemovalMessage>(
-                Self::ChunkRemoval.into(),
+            channel_config_builder::channel_config_reliable_unordered::<ChunkUpdateMessage>(
+                Self::ChunkUpdate.into(),
             ),
             channel_config_builder::channel_config_reliable_unordered::<PlayerInsertionMessage>(
                 Self::PlayerInsertion.into(),

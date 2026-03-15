@@ -315,7 +315,7 @@ impl ConsumerPoller {
                     let mut geosphere = self.passive_geosphere.lock().unwrap();
                     let mut spectator = self.spectator.lock().unwrap();
                     geosphere.cube_registry = message.cube_registry;
-                    for insertion in message.chunk_insertions {
+                    for insertion in message.chunk_updates {
                         let chunk_position = *insertion.key;
                         let chunk_slot_point_cluster =
                             geosphere::chunk::ChunkMorton::compute_cluster(chunk_position);
@@ -345,8 +345,8 @@ impl ConsumerPoller {
             .client_context
             .lock()
             .unwrap()
-            .receive_deserializable::<provider::channel::ChunkInsertionMessage, _>(
-            provider::channel::Channel::ChunkInsertion,
+            .receive_deserializable::<provider::channel::ChunkUpdateMessage, _>(
+            provider::channel::Channel::ChunkUpdate,
         ) {
             let chunk_position = *message.key;
             let chunk_slot_point_cluster =
@@ -356,27 +356,6 @@ impl ConsumerPoller {
                 .unwrap()
                 .chunk_map
                 .insert(message.key, message.chunk);
-            self.spectator
-                .lock()
-                .unwrap()
-                .purge_slot_point_cluster(chunk_slot_point_cluster);
-        }
-
-        while let Some(message) = self
-            .client_context
-            .lock()
-            .unwrap()
-            .receive_deserializable::<provider::channel::ChunkRemovalMessage, _>(
-            provider::channel::Channel::ChunkRemoval,
-        ) {
-            let chunk_position = *message.key;
-            let chunk_slot_point_cluster =
-                geosphere::chunk::ChunkMorton::compute_cluster(chunk_position);
-            self.passive_geosphere
-                .lock()
-                .unwrap()
-                .chunk_map
-                .remove(&message.key);
             self.spectator
                 .lock()
                 .unwrap()

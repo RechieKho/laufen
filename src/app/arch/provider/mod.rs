@@ -82,8 +82,7 @@ impl ProviderBuilder {
                 std::sync::atomic::AtomicU32::new(self.client_active_chunk_range_radius),
             ),
             ready_client_set: Default::default(),
-            chunk_insertion_queue: Default::default(),
-            chunk_removal_queue: Default::default(),
+            chunk_update_queue: Default::default(),
             abort_flag: abort_flag.clone(),
         };
 
@@ -154,8 +153,7 @@ struct ProviderPoller {
     pub chunk_subscription: SharedChunkSubscription,
     pub ready_client_set: SharedReadyClientSet,
     pub client_active_chunk_range_radius: std::sync::Arc<std::sync::atomic::AtomicU32>,
-    pub chunk_insertion_queue: SharedSendInstructionQueue<channel::ChunkInsertionMessage>,
-    pub chunk_removal_queue: SharedSendInstructionQueue<channel::ChunkRemovalMessage>,
+    pub chunk_update_queue: SharedSendInstructionQueue<channel::ChunkUpdateMessage>,
     pub abort_flag: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
@@ -212,29 +210,11 @@ impl ProviderPoller {
                 let mut chunk_subscription = self.chunk_subscription.lock().unwrap();
                 let player_chunk_subscription =
                     chunk_subscription.entry(*player.client_id()).or_default();
-                let chunk_point_set = active_chunk_point_cluster
+                let active_chunk_point_set = active_chunk_point_cluster
                     .into_iter()
                     .collect::<rapidhash::RapidHashSet<glam::IVec3>>();
-                let obsolete_chunk_points = player_chunk_subscription
-                    .iter()
-                    .copied()
-                    .filter(|p_chunk_position| !chunk_point_set.contains(p_chunk_position));
-                let obsolete_chunk_point_set = obsolete_chunk_points
-                    .clone()
-                    .collect::<rapidhash::RapidHashSet<glam::IVec3>>();
-                for obsolete_point in obsolete_chunk_points {
-                    self.chunk_removal_queue
-                        .lock()
-                        .unwrap()
-                        .push_back(SendInstruction {
-                            client_id: *player.client_id(),
-                            message: channel::ChunkRemovalMessage {
-                                key: geosphere::chunk::ChunkKey::from(obsolete_point),
-                            },
-                        });
-                }
                 player_chunk_subscription
-                    .retain(|p_chunk_point| !obsolete_chunk_point_set.contains(p_chunk_point));
+                    .retain(|p_chunk_point| active_chunk_point_set.contains(p_chunk_point));
             }
 
             {
@@ -247,12 +227,12 @@ impl ProviderPoller {
                     }
                     let key = geosphere::chunk::ChunkKey::from(new_point);
                     let chunk = self.active_geosphere.lock().unwrap().chunk(&key).clone();
-                    self.chunk_insertion_queue
+                    self.chunk_update_queue
                         .lock()
                         .unwrap()
                         .push_back(SendInstruction {
                             client_id: *player.client_id(),
-                            message: channel::ChunkInsertionMessage { chunk, key },
+                            message: channel::ChunkUpdateMessage { chunk, key },
                         });
                     player_chunk_subscription.push(new_point);
                 }
@@ -292,7 +272,7 @@ impl ProviderPoller {
                                 spatial.position.z as i32,
                             );
 
-                            let mut chunk_insertions = Vec::<channel::ChunkInsertionMessage>::default();
+                            let mut chunk_updates = Vec::<channel::ChunkUpdateMessage>::default();
 
                             for new_point in compute_active_chunk_point_cluster(initial_slot_position, active_chunk_range_radius) {
                                 if abort_flag.load(std::sync::atomic::Ordering::Relaxed) {
@@ -301,7 +281,7 @@ impl ProviderPoller {
 
                                 let key = geosphere::chunk::ChunkKey::from(new_point);
                                 let chunk = active_geosphere.lock().unwrap().chunk(&key).clone();
-                                chunk_insertions.push(channel::ChunkInsertionMessage{
+                                chunk_updates.push(channel::ChunkUpdateMessage{
                                     key,
                                     chunk
                                 });
@@ -311,7 +291,7 @@ impl ProviderPoller {
                                 let mut chunk_subscription = chunk_subscription.lock().unwrap();
                                 let player_chunk_subscription =
                                     chunk_subscription.entry(client_id).or_default();
-                                chunk_insertions.iter().for_each(|p_message| player_chunk_subscription.push(*p_message.key));
+                                chunk_updates.iter().for_each(|p_message| player_chunk_subscription.push(*p_message.key));
                             }
 
                             server_context.lock().unwrap().send_large_serializable(
@@ -319,7 +299,7 @@ impl ProviderPoller {
                                 channel::Channel::PrepareMessage,
                                 &channel::PrepareMessage {
                                     cube_registry: active_geosphere.lock().unwrap().cube_registry().clone(),
-                                    chunk_insertions,
+                                    chunk_updates,
                                     self_insertion: channel::PlayerInsertionMessage { player, spatial }
                                 },
                             );
@@ -361,37 +341,17 @@ impl ProviderPoller {
             }
         }
 
-        let mut queue_send_count = 0u16;
-
-        while let Ok(mut queue) = self.chunk_insertion_queue.try_lock() {
-            if queue_send_count > Self::MAX_QUEUE_SEND_PER_POLL {
-                break;
-            }
-            if let Some(instruction) = queue.pop_front() {
-                self.server_context.lock().unwrap().send_serializable(
-                    instruction.client_id,
-                    channel::Channel::ChunkInsertion,
-                    &instruction.message,
-                );
-                queue_send_count += 1;
-            } else {
-                break;
-            }
-        }
-
-        while let Ok(mut queue) = self.chunk_removal_queue.try_lock() {
-            if queue_send_count > Self::MAX_QUEUE_SEND_PER_POLL {
-                break;
-            }
-            if let Some(instruction) = queue.pop_front() {
-                self.server_context.lock().unwrap().send_serializable(
-                    instruction.client_id,
-                    channel::Channel::ChunkRemoval,
-                    &instruction.message,
-                );
-                queue_send_count += 1;
-            } else {
-                break;
+        if let Ok(mut queue) = self.chunk_update_queue.try_lock() {
+            for _ in 0..Self::MAX_QUEUE_SEND_PER_POLL {
+                if let Some(instruction) = queue.pop_front() {
+                    self.server_context.lock().unwrap().send_serializable(
+                        instruction.client_id,
+                        channel::Channel::ChunkUpdate,
+                        &instruction.message,
+                    );
+                } else {
+                    break;
+                }
             }
         }
 
