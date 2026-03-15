@@ -406,10 +406,10 @@ impl ProviderPoller {
                 self.active_biosphere.lock().unwrap().entities_mut().run(|p_players: shipyard::View<biosphere::player::Player>, mut p_spatials: shipyard::ViewMut<biosphere::spatial::Spatial>| {
                     for (player, spatial) in (&p_players, &mut p_spatials).iter() {
                         if let Some(input) = player_inputs.remove(player.client_id()) {
-                            if let Some(normalized) = input.direction.try_normalize() {
-                                spatial.direction = normalized;
+                            if let Some(normalized) = input.move_direction.try_normalize() {
                                 spatial.position += normalized * 5f32 / (p_delta.as_millis() as f32);
                             }
+                            spatial.direction = input.look_direction.normalize_or(glam::Vec3::NEG_Z);
                         }
                     }
                 });

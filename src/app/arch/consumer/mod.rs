@@ -247,7 +247,8 @@ impl Consumer {
             client_context.send_serializable(
                 channel::Channel::PlayerInput,
                 &channel::PlayerInputMessage {
-                    direction: rotation * input_direction,
+                    move_direction: rotation * input_direction,
+                    look_direction: rotation * glam::Vec3::NEG_Z,
                 },
             );
         }

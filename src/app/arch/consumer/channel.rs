@@ -12,7 +12,8 @@ impl ReliableOrderedMessage for ReadyMessage {}
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct PlayerInputMessage {
-    pub direction: glam::Vec3,
+    pub move_direction: glam::Vec3,
+    pub look_direction: glam::Vec3,
 }
 impl Message for PlayerInputMessage {
     const MAX_COUNT: usize = 1024;
